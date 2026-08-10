@@ -1,0 +1,60 @@
+name: Scrape Precious Metals
+
+on:
+  schedule:
+    # 11:00 AM Nepal Time (UTC+5:45) = 05:15 UTC, every day. FENEGOSIDA publishes rates on Sundays too
+    # (60 of the last 400 rate days were Sundays) and on roughly half of Saturdays, so a weekday-only
+    # cron would silently never see those. Rows are source-dated and deduped, so extra runs cost nothing.
+    - cron: '15 5 * * *'
+  workflow_dispatch:
+
+concurrency:
+  # All three workflows push to the same branch, so a plain push fails if another one landed a
+  # commit since checkout. One shared group means they queue instead of racing; the rebase retry
+  # in the push step covers whatever still slips through, such as a human commit.
+  group: commit-data
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.14.0
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Scrape gold/silver prices
+        run: pnpm tsx scripts/daily/scrape-metals.ts
+
+      - name: Commit and push data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/precious-metals
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          # Nepal time, not UTC, so the message names the same day the rows are dated.
+          git commit -m "chore: update precious metals data for $(TZ=Asia/Kathmandu date +%F)"
+          for attempt in 1 2 3; do
+            if git push; then exit 0; fi
+            echo "Push rejected (attempt $attempt), rebasing onto the latest ${GITHUB_REF_NAME:-main} and retrying."
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME:-main}" || exit 1
+          done
+          echo "Could not push after 3 attempts."
+          exit 1

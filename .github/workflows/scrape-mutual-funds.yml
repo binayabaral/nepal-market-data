@@ -1,0 +1,138 @@
+name: Scrape SIP Mutual Fund NAVs
+
+on:
+  schedule:
+    # 4:00 PM Nepal Time (UTC+5:45) = 10:15 UTC, every day. 13 of the 14 funds publish NAV on all
+    # seven calendar days, and every source posts day D's NAV on D+1, so a Monday-Friday schedule
+    # never asked for Friday's or Saturday's value at all.
+    - cron: '15 10 * * *'
+  workflow_dispatch:
+
+concurrency:
+  # All three workflows push to the same branch, so a plain push fails if another one landed a
+  # commit since checkout. One shared group means they queue instead of racing; the rebase retry
+  # in the push step covers whatever still slips through, such as a human commit.
+  group: commit-data
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.14.0
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # $RUNNER_TEMP is used rather than a workflow-level env var (the `runner` context is not
+      # available up there) and rather than the workspace, so the tally never shows up as an
+      # untracked file for the commit step to pick up.
+      #
+      # Every fund keeps `continue-on-error` so one AMC's outage cannot stop the other thirteen, and
+      # each one records its own outcome so the final step can tell "one fund is down" (normal, and
+      # self-heals from its own history on the next run) from "every fund is down" (our problem).
+      - name: Scrape Citizens Capital fund NAV (CSBY)
+        continue-on-error: true
+        run: pnpm tsx scripts/daily/scrape-csby-nav.ts && echo 'CSBY ok' >> "$RUNNER_TEMP/fund-results.txt" || { echo 'CSBY FAILED' >> "$RUNNER_TEMP/fund-results.txt"; exit 1; }
+
+      - name: Scrape Garima Capital fund NAV (GSYA)
+        continue-on-error: true
+        run: pnpm tsx scripts/daily/scrape-gsya-nav.ts && echo 'GSYA ok' >> "$RUNNER_TEMP/fund-results.txt" || { echo 'GSYA FAILED' >> "$RUNNER_TEMP/fund-results.txt"; exit 1; }
+
+      - name: Scrape Machhapuchchhre Capital fund NAV (MSIP)
+        continue-on-error: true
+        run: pnpm tsx scripts/daily/scrape-msip-nav.ts && echo 'MSIP ok' >> "$RUNNER_TEMP/fund-results.txt" || { echo 'MSIP FAILED' >> "$RUNNER_TEMP/fund-results.txt"; exit 1; }
+
+      - name: Scrape Kumari Capital fund NAV (KSLY)
+        continue-on-error: true
+        run: pnpm tsx scripts/daily/scrape-ksly-nav.ts && echo 'KSLY ok' >> "$RUNNER_TEMP/fund-results.txt" || { echo 'KSLY FAILED' >> "$RUNNER_TEMP/fund-results.txt"; exit 1; }
+
+      - name: Scrape Nabil Invest fund NAV (NFCF)
+        continue-on-error: true
+        run: pnpm tsx scripts/daily/scrape-nfcf-nav.ts && echo 'NFCF ok' >> "$RUNNER_TEMP/fund-results.txt" || { echo 'NFCF FAILED' >> "$RUNNER_TEMP/fund-results.txt"; exit 1; }
+
+      - name: Scrape NIMB Ace Capital fund NAV (NIBLSF)
+        continue-on-error: true
+        run: pnpm tsx scripts/daily/scrape-niblsf-nav.ts && echo 'NIBLSF ok' >> "$RUNNER_TEMP/fund-results.txt" || { echo 'NIBLSF FAILED' >> "$RUNNER_TEMP/fund-results.txt"; exit 1; }
+
+      - name: Scrape NIC Asia Capital fund NAV (NADDF)
+        continue-on-error: true
+        run: pnpm tsx scripts/daily/scrape-naddf-nav.ts && echo 'NADDF ok' >> "$RUNNER_TEMP/fund-results.txt" || { echo 'NADDF FAILED' >> "$RUNNER_TEMP/fund-results.txt"; exit 1; }
+
+      - name: Scrape NIC Asia Capital fund NAV (NICAELIS)
+        continue-on-error: true
+        run: pnpm tsx scripts/daily/scrape-nicaelis-nav.ts && echo 'NICAELIS ok' >> "$RUNNER_TEMP/fund-results.txt" || { echo 'NICAELIS FAILED' >> "$RUNNER_TEMP/fund-results.txt"; exit 1; }
+
+      - name: Scrape NMB Capital fund NAV (NMBSBF)
+        continue-on-error: true
+        run: pnpm tsx scripts/daily/scrape-nmbsbf-nav.ts && echo 'NMBSBF ok' >> "$RUNNER_TEMP/fund-results.txt" || { echo 'NMBSBF FAILED' >> "$RUNNER_TEMP/fund-results.txt"; exit 1; }
+
+      - name: Scrape Sanima Capital fund NAV (SFF)
+        continue-on-error: true
+        run: pnpm tsx scripts/daily/scrape-sff-nav.ts && echo 'SFF ok' >> "$RUNNER_TEMP/fund-results.txt" || { echo 'SFF FAILED' >> "$RUNNER_TEMP/fund-results.txt"; exit 1; }
+
+      - name: Scrape Prabhu Capital fund NAV (PSIS)
+        continue-on-error: true
+        run: pnpm tsx scripts/daily/scrape-psis-nav.ts && echo 'PSIS ok' >> "$RUNNER_TEMP/fund-results.txt" || { echo 'PSIS FAILED' >> "$RUNNER_TEMP/fund-results.txt"; exit 1; }
+
+      - name: Scrape Laxmi Sunrise Capital fund NAV (SLK)
+        continue-on-error: true
+        run: pnpm tsx scripts/daily/scrape-slk-nav.ts && echo 'SLK ok' >> "$RUNNER_TEMP/fund-results.txt" || { echo 'SLK FAILED' >> "$RUNNER_TEMP/fund-results.txt"; exit 1; }
+
+      - name: Scrape Siddhartha Capital fund NAV (SSIS)
+        continue-on-error: true
+        run: pnpm tsx scripts/daily/scrape-ssis-nav.ts && echo 'SSIS ok' >> "$RUNNER_TEMP/fund-results.txt" || { echo 'SSIS FAILED' >> "$RUNNER_TEMP/fund-results.txt"; exit 1; }
+
+      - name: Scrape Nabil Invest fund NAV (NI31)
+        continue-on-error: true
+        run: pnpm tsx scripts/daily/scrape-ni31-nav.ts && echo 'NI31 ok' >> "$RUNNER_TEMP/fund-results.txt" || { echo 'NI31 FAILED' >> "$RUNNER_TEMP/fund-results.txt"; exit 1; }
+
+      - name: Commit and push data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/sip-mutual-funds
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          # Nepal time, not UTC, so the message names the same day the rows are dated.
+          git commit -m "chore: update SIP mutual fund NAV data for $(TZ=Asia/Kathmandu date +%F)"
+          for attempt in 1 2 3; do
+            if git push; then exit 0; fi
+            echo "Push rejected (attempt $attempt), rebasing onto the latest ${GITHUB_REF_NAME:-main} and retrying."
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME:-main}" || exit 1
+          done
+          echo "Could not push after 3 attempts."
+          exit 1
+
+      # A total outage used to produce a green run, "No changes to commit", and no signal at all.
+      # Zero successes is the one outcome that cannot be a quiet day at every AMC at once.
+      - name: Report per-fund outcome
+        if: always()
+        run: |
+          if [ ! -f "$RUNNER_TEMP/fund-results.txt" ]; then
+            echo "No fund step recorded an outcome at all."
+            exit 1
+          fi
+          sort "$RUNNER_TEMP/fund-results.txt"
+          succeeded=$(grep -c ' ok$' "$RUNNER_TEMP/fund-results.txt" || true)
+          failed=$(grep -c ' FAILED$' "$RUNNER_TEMP/fund-results.txt" || true)
+          echo "$succeeded fund(s) succeeded, $failed failed."
+          if [ "$succeeded" -eq 0 ]; then
+            echo "Every fund failed, so this is not sparse disclosure: something is broken here or every source is down."
+            exit 1
+          fi

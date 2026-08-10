@@ -1,0 +1,5 @@
+# tsx bundles esbuild, whose install script links the platform-specific binary. pnpm blocks
+# dependency install scripts by default, and tsx cannot start without that binary, so esbuild
+# has to be allow-listed explicitly.
+allowBuilds:
+  esbuild: true

@@ -1,0 +1,9 @@
+node_modules
+.env
+*.log
+
+# Local development notes, kept out of this public repo on purpose: they discuss the private
+# upstream application these scrapers came from. They must stay on disk (a new session reads them
+# to pick up project context) but must never be published here.
+.claude/
+CLAUDE.md

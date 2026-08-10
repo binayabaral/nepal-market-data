@@ -1,0 +1,22 @@
+{
+  "name": "nepal-market-data",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Daily-updated historical dataset for NEPSE stocks, gold/silver rates, and Nepali SIP mutual fund NAVs, stored as CSV.",
+  "license": "MIT",
+  "packageManager": "pnpm@11.14.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "tsx": "^4.19.2",
+    "cheerio": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}

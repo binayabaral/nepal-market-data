@@ -1,0 +1,117 @@
+name: Reconcile history
+
+on:
+  schedule:
+    # 04:00 Nepal Time (UTC+5:45) on Mondays = 22:15 UTC Sunday. Deliberately far from every daily
+    # cron (05:15, 09:15, 10:15 UTC) so the two never contend for the branch.
+    - cron: '15 22 * * 0'
+  workflow_dispatch:
+    inputs:
+      source:
+        description: Which history to reconcile
+        type: choice
+        default: all
+        options: [all, nepse, metals, funds]
+
+concurrency:
+  # Same group as the daily scrapers: this workflow pushes to the same branch and re-reads the same
+  # files, so it must queue behind them rather than run alongside.
+  group: commit-data
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+# Why this exists: the daily scrapers only ever fetch the latest value, so a run that fails (or a
+# source that is briefly down, or a day nobody was watching) leaves a hole that no later daily run
+# will ever fill. Nearly every source here also serves its full history, and the backfill scripts
+# only add dates that are missing, so re-running them is the recovery mechanism. Doing that on a
+# schedule is what makes the dataset self-healing instead of dependent on somebody noticing.
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    # The NEPSE backfill alone fetches ~372 per-symbol files, so this is far slower than a daily run.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.14.0
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Reconcile NEPSE history
+        if: github.event_name == 'schedule' || inputs.source == 'all' || inputs.source == 'nepse'
+        continue-on-error: true
+        run: pnpm tsx scripts/backfill/backfill-nepse.ts && echo 'nepse ok' >> "$RUNNER_TEMP/reconcile.txt" || { echo 'nepse FAILED' >> "$RUNNER_TEMP/reconcile.txt"; exit 1; }
+
+      - name: Reconcile precious metals history
+        if: github.event_name == 'schedule' || inputs.source == 'all' || inputs.source == 'metals'
+        continue-on-error: true
+        run: pnpm tsx scripts/backfill/backfill-metals.ts && echo 'metals ok' >> "$RUNNER_TEMP/reconcile.txt" || { echo 'metals FAILED' >> "$RUNNER_TEMP/reconcile.txt"; exit 1; }
+
+      # Looped rather than one step per fund: unlike the daily workflow, there is nothing here worth
+      # reading per-fund in the Actions sidebar, and the tally below already names whichever failed.
+      - name: Reconcile mutual fund NAV history
+        if: github.event_name == 'schedule' || inputs.source == 'all' || inputs.source == 'funds'
+        continue-on-error: true
+        run: |
+          failures=0
+          for script in scripts/backfill/backfill-*-nav.ts; do
+            name=$(basename "$script" .ts)
+            echo "::group::$name"
+            if pnpm tsx "$script"; then
+              echo "$name ok" >> "$RUNNER_TEMP/reconcile.txt"
+            else
+              echo "$name FAILED" >> "$RUNNER_TEMP/reconcile.txt"
+              failures=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $failures
+
+      - name: Commit and push recovered rows
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --cached --quiet; then
+            echo "Nothing was missing, no rows recovered."
+            exit 0
+          fi
+          # Nepal time, not UTC, so the message names the same day the rows are dated.
+          git commit -m "chore: reconcile historical data for $(TZ=Asia/Kathmandu date +%F)"
+          for attempt in 1 2 3; do
+            if git push; then exit 0; fi
+            echo "Push rejected (attempt $attempt), rebasing onto the latest ${GITHUB_REF_NAME:-main} and retrying."
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME:-main}" || exit 1
+          done
+          echo "Could not push after 3 attempts."
+          exit 1
+
+      # A reconciliation run that recovers nothing is the normal, healthy case, so silence here is
+      # not a success signal. Only a total failure is actionable: it means the recovery mechanism
+      # itself is broken, which would otherwise stay invisible until a gap needed healing.
+      - name: Report outcome
+        if: always()
+        run: |
+          if [ ! -f "$RUNNER_TEMP/reconcile.txt" ]; then
+            echo "No reconciliation step recorded an outcome at all."
+            exit 1
+          fi
+          sort "$RUNNER_TEMP/reconcile.txt"
+          succeeded=$(grep -c ' ok$' "$RUNNER_TEMP/reconcile.txt" || true)
+          failed=$(grep -c ' FAILED$' "$RUNNER_TEMP/reconcile.txt" || true)
+          echo "$succeeded source(s) reconciled, $failed failed."
+          if [ "$succeeded" -eq 0 ]; then
+            echo "Every reconciliation failed, so the self-healing path is broken."
+            exit 1
+          fi
