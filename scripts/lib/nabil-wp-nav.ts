@@ -19,56 +19,69 @@ const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 
 /**
- * The challenge is intermittent and burst-triggered, not a blanket block, so a paced retry clears it.
+ * This host is unreliable from CI in two different ways, both transient, so everything here is about
+ * pacing and retrying rather than about getting past a permanent block.
  *
- * Measured from a GitHub runner: a single request succeeds, but a backfill's tight loop of one POST
- * per BS year (two funds back to back, no pause) gets an HTML challenge page partway through. Two
- * runs 14 minutes apart, same code and same IP range, gave opposite results. A real browser also got
- * through, so the block is not about the IP; it is about how fast the requests arrive.
+ * Measured from GitHub runners across several runs: one request succeeds, but a backfill's tight loop
+ * of one POST per BS year (two funds back to back, no pause) fails partway through, sometimes with an
+ * HTML challenge page at a 200 status and sometimes with a plain connect timeout at 10s. Runs minutes
+ * apart, same code and same IP range, gave opposite results, and a real browser also got through, so
+ * the IP was never the problem.
  *
- * Hence a small pause between requests plus increasing backoff on a challenge. Puppeteer was
- * considered and rejected: it worked, but a ~300 MB Chromium download in every run is a permanent
- * price for a transient problem.
+ * Puppeteer was tested and does work, but was rejected: a ~300 MB Chromium download in every run is a
+ * permanent price for a transient problem, and it would not have helped the connect timeouts at all.
  */
 const PACING_MS = 1_500;
-const RETRY_WAITS_MS = [5_000, 15_000, 30_000];
+const RETRY_WAITS_MS = [5_000, 15_000, 30_000, 60_000];
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 let lastRequestAt = 0;
 
-/** Serves the challenge page, or anything else that is not the JSON we asked for. */
-class ChallengedError extends Error {}
+/** Worth another attempt: the challenge page, a network failure, or a throttling/server status. */
+class TransientError extends Error {}
 
 async function requestBsYear(schemeId: number, refererUrl: string, bsYear: number): Promise<string> {
   const sinceLast = Date.now() - lastRequestAt;
   if (sinceLast < PACING_MS) await sleep(PACING_MS - sinceLast);
   lastRequestAt = Date.now();
 
-  const response = await fetch(AJAX_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-      'X-Requested-With': 'XMLHttpRequest',
-      'User-Agent': USER_AGENT,
-      Referer: refererUrl
-    },
-    body: new URLSearchParams({
-      action: 'scheme_data_filter',
-      scheme_id: String(schemeId),
-      type: 'daily',
-      year: String(bsYear),
-      order: 'DESC'
-    })
-  });
+  let response: Response;
+  try {
+    response = await fetch(AJAX_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        'User-Agent': USER_AGENT,
+        Referer: refererUrl
+      },
+      body: new URLSearchParams({
+        action: 'scheme_data_filter',
+        scheme_id: String(schemeId),
+        type: 'daily',
+        year: String(bsYear),
+        order: 'DESC'
+      })
+    });
+  } catch (error) {
+    // Connect timeouts and DNS/socket failures land here. Node's connect timeout is 10s and cannot be
+    // raised without pulling in undici, so the answer is to try again rather than to wait longer.
+    const cause = error instanceof Error && error.cause instanceof Error ? `: ${error.cause.message}` : '';
+    throw new TransientError(`Network failure reaching Nabil for BS year ${bsYear}${cause}`);
+  }
+
+  if (response.status === 429 || response.status >= 500) {
+    throw new TransientError(`HTTP ${response.status} from Nabil for BS year ${bsYear}`);
+  }
   if (!response.ok) throw new Error(`HTTP ${response.status} fetching Nabil scheme_id=${schemeId} BS year ${bsYear}`);
 
   // Read as text rather than calling .json(): the challenge arrives as HTML with a 200, and
   // response.json() would surface it as a bare SyntaxError that reads like a parsing bug and cannot
-  // be told apart from one worth retrying.
+  // be told apart from something worth retrying.
   const body = await response.text();
   if (!body.trimStart().startsWith('{')) {
-    throw new ChallengedError(
+    throw new TransientError(
       `Nabil served a non-JSON response for BS year ${bsYear} (likely the SiteGround challenge): ${body.slice(0, 80).replace(/\s+/g, ' ')}`
     );
   }
@@ -85,12 +98,12 @@ export async function fetchNabilBsYear(schemeId: number, refererUrl: string, bsY
       break;
     } catch (error) {
       const wait = RETRY_WAITS_MS[attempt];
-      if (!(error instanceof ChallengedError) || wait === undefined) throw error;
+      if (!(error instanceof TransientError) || wait === undefined) throw error;
       console.warn(`${error.message}; retrying in ${wait / 1000}s`);
       await sleep(wait);
     }
   }
-  if (body === null) throw new Error(`Nabil kept serving the challenge for BS year ${bsYear}`);
+  if (body === null) throw new Error(`Nabil kept failing for BS year ${bsYear} after ${RETRY_WAITS_MS.length + 1} attempts`);
 
   const json: { success: boolean; message?: string; data?: Array<{ eng_date: string; nav: string }> } = JSON.parse(body);
   if (!json.success) throw new Error(`Nabil API reported failure for BS year ${bsYear}: ${json.message}`);
