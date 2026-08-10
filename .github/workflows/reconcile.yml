@@ -61,16 +61,11 @@ jobs:
       # Looped rather than one step per fund: unlike the daily workflow, there is nothing here worth
       # reading per-fund in the Actions sidebar, and the tally below already names whichever failed.
       #
-      # NFCF and NI31 are skipped on purpose. Their HISTORY comes from nabilinvest.com.np's WordPress
-      # endpoint, which sits behind a SiteGround bot challenge that answers a datacenter IP with an
-      # HTML challenge page instead of JSON ("Unexpected token '<'"), while letting an ordinary
-      # residential connection through. So those two backfills work from a laptop and cannot work
-      # here. Leaving them in the loop would make every weekly run report two failures forever, and a
-      # permanently red run is one nobody reads, which would hide a real failure.
-      #
-      # This costs nothing day to day: their DAILY scrapers use napi.nabilinvest.com.np, a different
-      # and unchallenged host, and both pass here. It only means a gap in those two funds' history has
-      # to be healed by running the two scripts locally.
+      # NFCF and NI31 were skipped here briefly, on the assumption that Nabil's WordPress endpoint
+      # blocks datacenter IPs outright. Probing from a runner disproved that: a plain fetch got 366
+      # rows, and two runs 14 minutes apart behaved differently. The challenge is intermittent and
+      # triggered by request bursts, so it is handled in scripts/lib/nabil-wp-nav.ts with pacing plus
+      # backoff, and both funds take part here again.
       - name: Reconcile mutual fund NAV history
         if: github.event_name == 'schedule' || inputs.source == 'all' || inputs.source == 'funds'
         continue-on-error: true
@@ -78,12 +73,6 @@ jobs:
           failures=0
           for script in scripts/backfill/backfill-*-nav.ts; do
             name=$(basename "$script" .ts)
-            case "$name" in
-              backfill-nfcf-nav|backfill-ni31-nav)
-                echo "$name skipped (bot-challenged from CI, run it locally)"
-                continue
-                ;;
-            esac
             echo "::group::$name"
             if pnpm tsx "$script"; then
               echo "$name ok" >> "$RUNNER_TEMP/reconcile.txt"
