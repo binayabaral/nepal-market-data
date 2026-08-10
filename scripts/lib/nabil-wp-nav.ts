@@ -9,9 +9,9 @@
  * which exposes the current NAV but no history at all (`/api/navs` is Bearer-gated, and there is no
  * per-scheme navs collection), which is why this endpoint is still the only route to the past.
  *
- * nabilinvest.com.np sits behind a SiteGround bot-challenge that fires INTERMITTENTLY: it answers
- * with an HTML challenge page instead of JSON, at a 200 status. See the pacing constants below for
- * what was measured and why this is handled with pacing and backoff rather than a headless browser.
+ * nabilinvest.com.np is INTERMITTENTLY unreachable, in two ways: a SiteGround bot-challenge served as
+ * HTML at a 200 status, and plain connect timeouts. See the pacing constants below for what was
+ * measured and why this is handled with pacing and backoff rather than a headless browser.
  */
 
 const AJAX_URL = 'https://nabilinvest.com.np/wp-admin/admin-ajax.php';
