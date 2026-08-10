@@ -177,6 +177,11 @@ all of them, if you spot a gap and do not want to wait for Monday.
 A reconciliation run that recovers nothing is the normal case. It only reports failure if every
 source failed, which would mean the recovery path itself is broken.
 
+Two funds are the exception: NFCF and NI31 take their **history** from a host that answers datacenter
+IPs with a bot-challenge page, so those two backfills cannot run in CI and are skipped there. Their
+daily collection is unaffected (it uses a different, unchallenged endpoint), but healing a gap in
+those two funds' history means running their backfill scripts locally.
+
 You can do the same thing locally at any time by re-running the matching backfill script, because
 both paths key rows on the same source-supplied date and only missing dates are ever filled in.
 
