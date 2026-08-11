@@ -201,6 +201,10 @@ pnpm tsx scripts/backfill/backfill-csby-nav.ts
 # ...one backfill-<symbol>-nav.ts script per fund in scripts/backfill/
 ```
 
+The two Nabil scripts (`backfill-nfcf-nav.ts`, `backfill-ni31-nav.ts`) fetch only the last two
+Bikram Sambat years by default, since that is where any recent gap can be and their source is the
+flakiest one here. Pass `--full` to sweep every year for a complete reseed.
+
 Backfill scripts are idempotent (they dedupe against every date already on file), so re-running one
 is always safe, and the order they run in relative to the daily scripts does not matter: every write
 goes through one helper that fills in only the dates missing from a file and leaves it sorted

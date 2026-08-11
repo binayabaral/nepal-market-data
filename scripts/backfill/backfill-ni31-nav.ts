@@ -28,10 +28,17 @@ async function main() {
   // Ceiling derived from today's BS year rather than a fixed try count, which would otherwise stop
   // short of the present a few years from now and quietly write nothing new.
   const endBsYear = currentBsYear();
-  for (let year = START_BS_YEAR; year <= endBsYear; year++) {
+  // Only the last two BS years by default. This endpoint is the flakiest source in the repo (an
+  // intermittent SiteGround challenge that a burst of requests provokes), and history older than
+  // that is already on file and immutable, so re-fetching every year weekly bought nothing while
+  // maximising the chance of tripping the challenge. Two years rather than one so a gap opening
+  // either side of the Nepali new year is still reachable. Pass --full for a complete reseed.
+  const fullSweep = process.argv.includes('--full');
+  const startBsYear = fullSweep ? START_BS_YEAR : Math.max(START_BS_YEAR, endBsYear - 1);
+  for (let year = startBsYear; year <= endBsYear; year++) {
     const rows = await fetchNabilBsYear(SCHEME_ID, REFERER_URL, year);
     console.log(`  BS ${year}: ${rows.length} row(s)`);
-    if (rows.length === 0 && year > START_BS_YEAR) break;
+    if (rows.length === 0 && year > startBsYear) break;
     allRows.push(...rows);
   }
 
