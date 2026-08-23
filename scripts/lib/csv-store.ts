@@ -71,6 +71,33 @@ function isValidIsoDate(value: string): boolean {
   );
 }
 
+/**
+ * Every data row in a CSV as header-keyed objects, or an empty array if the file doesn't exist.
+ *
+ * Goes through the same quote-aware parser the writers use, so a field containing a comma (a company
+ * name like "Nabil Bank Limited, Kathmandu") round-trips instead of being split by a naive
+ * `line.split(',')`.
+ */
+export function readRows(filePath: string): Array<Record<string, string>> {
+  const lines = readNonEmptyLines(filePath);
+  const headerLine = lines[0];
+  if (!headerLine) return [];
+
+  // Header names are trimmed as well as values. `readNonEmptyLines` splits on `\n` only, so a
+  // CRLF-terminated file leaves a trailing `\r` on the LAST field of every line, including the header
+  // row. Untrimmed, that made the final column's name `"status\r"`, so `row.status` came back
+  // undefined and a read-modify-write round trip silently blanked that column for every row.
+  const header = parseCsvLine(headerLine).map(col => col.trim());
+  return lines.slice(1).map(line => {
+    const values = parseCsvLine(line);
+    const row: Record<string, string> = {};
+    header.forEach((col, i) => {
+      row[col] = (values[i] ?? '').trim();
+    });
+    return row;
+  });
+}
+
 /** The last row in the file as a header-keyed object, or null if the file doesn't exist or has no data rows. */
 function readLastRow(filePath: string): Record<string, string> | null {
   const lines = readNonEmptyLines(filePath);
@@ -88,7 +115,10 @@ function readLastRow(filePath: string): Record<string, string> | null {
 }
 
 /**
- * The file-name-safe form of a market symbol, for the one-file-per-symbol layout.
+ * The file-name-safe form of a market symbol, for the one-file-per-symbol layout. `symbolToKey`
+ * returns the bare stem and `symbolToFileName` adds `.csv`, so the same transform can key a
+ * reference table (`data/reference/nepse-symbols.csv`) and name a data file without the two
+ * drifting apart.
  *
  * Three NEPSE debentures are named after a fiscal-year span and carry a slash: `GBILD84/85`,
  * `MND84/85`, `NICAD85/86`. Passing those straight to `join()` silently produced a DIRECTORY
@@ -99,10 +129,14 @@ function readLastRow(filePath: string): Record<string, string> | null {
  * `[A-Za-z0-9._-]` is replaced too, so a new symbol shape cannot reintroduce the same class of bug.
  * The upstream history repo has no name needing this, so nothing has to match its convention.
  */
-export function symbolToFileName(symbol: string): string {
+export function symbolToKey(symbol: string): string {
   const safe = symbol.trim().replace(/\//g, '-').replace(/[^A-Za-z0-9._-]/g, '-');
   if (!safe || safe === '.' || safe === '..') throw new Error(`Symbol "${symbol}" has no usable file name`);
-  return `${safe}.csv`;
+  return safe;
+}
+
+export function symbolToFileName(symbol: string): string {
+  return `${symbolToKey(symbol)}.csv`;
 }
 
 /**
@@ -187,6 +221,84 @@ export function appendRows(
   const merged = [...existing, ...added].sort((a, b) => a.date.localeCompare(b.date));
   writeFileSync(filePath, [existingHeader, ...merged.map(row => row.line)].join('\n') + '\n');
   return { added: added.length, skippedInvalid };
+}
+
+/** What one `upsertRows` call did: rows newly created, and existing rows whose values changed. */
+export type UpsertResult = { added: number; updated: number };
+
+/**
+ * The dimension-data counterpart of `appendRows`, for a table keyed on something other than a date.
+ *
+ * `appendRows` is append-only by design: a row for a date already on file is never touched, which is
+ * exactly right for a price series where history cannot change. Reference data is the opposite. A
+ * company gets renamed, moves sector, and there is one row per symbol rather than one per day, so the
+ * right behaviour is upsert-by-key with the file kept sorted by that key.
+ *
+ * The one subtlety, and the reason this cannot be a naive overwrite: **an empty incoming value never
+ * clears a value already on file.** Different writers fill different columns here. The daily run
+ * refreshes names from one cheap request and knows nothing about sectors; the sector filler visits
+ * one page per symbol and knows nothing about names. If a blank overwrote, whichever ran last would
+ * wipe the other's column. Because blanks are ignored instead, the two compose freely and can run at
+ * different cadences, and a partial row is always safe to write.
+ *
+ * Nothing is written when the result is byte-identical to what is on file, so a no-op run leaves no
+ * diff for the workflow to commit.
+ */
+export function upsertRows(
+  filePath: string,
+  header: string[],
+  keyColumn: string,
+  rows: Array<Record<string, string>>
+): UpsertResult {
+  const dir = dirname(filePath);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+
+  const keyIndex = header.indexOf(keyColumn);
+  if (keyIndex === -1) throw new Error(`Key column "${keyColumn}" is not in the header [${header.join(', ')}]`);
+
+  const lines = readNonEmptyLines(filePath);
+  const onFile = new Map<string, string[]>();
+  for (const line of lines.slice(1)) {
+    const fields = parseCsvLine(line).map(field => field.trim());
+    const key = fields[keyIndex] ?? '';
+    if (key) onFile.set(key, header.map((_, i) => fields[i] ?? ''));
+  }
+
+  let added = 0;
+  let updated = 0;
+  for (const row of rows) {
+    const key = String(row[keyColumn] ?? '').trim();
+    if (!key) continue;
+
+    const existing = onFile.get(key);
+    if (!existing) {
+      onFile.set(key, header.map(col => String(row[col] ?? '').trim()));
+      added++;
+      continue;
+    }
+
+    // A non-empty incoming value wins; a blank one leaves what is already there. See the header.
+    let changed = false;
+    const merged = header.map((col, i) => {
+      const current = existing[i] ?? '';
+      const incoming = String(row[col] ?? '').trim();
+      if (incoming === '' || incoming === current) return current;
+      changed = true;
+      return incoming;
+    });
+    if (changed) {
+      onFile.set(key, merged);
+      updated++;
+    }
+  }
+
+  const sorted = [...onFile.keys()].sort((a, b) => a.localeCompare(b));
+  const body = sorted.map(key => (onFile.get(key) ?? []).map(escapeCsvField).join(','));
+  const next = [header.join(','), ...body].join('\n') + '\n';
+
+  const current = existsSync(filePath) ? readFileSync(filePath, 'utf8') : '';
+  if (next !== current) writeFileSync(filePath, next);
+  return { added, updated };
 }
 
 /**

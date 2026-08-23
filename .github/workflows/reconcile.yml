@@ -11,7 +11,7 @@ on:
         description: Which history to reconcile
         type: choice
         default: all
-        options: [all, nepse, metals, funds]
+        options: [all, nepse, metals, funds, symbols]
 
 concurrency:
   # Same group as the daily scrapers: this workflow pushes to the same branch and re-reads the same
@@ -52,6 +52,15 @@ jobs:
         if: github.event_name == 'schedule' || inputs.source == 'all' || inputs.source == 'nepse'
         continue-on-error: true
         run: pnpm tsx scripts/backfill/backfill-nepse.ts && echo 'nepse ok' >> "$RUNNER_TEMP/reconcile.txt" || { echo 'nepse FAILED' >> "$RUNNER_TEMP/reconcile.txt"; exit 1; }
+
+      # The daily scraper already keeps this table current, so this is a backstop rather than the
+      # mechanism: it recovers the case where the daily run has been failing, or where more symbols
+      # listed at once than the daily cap of 15 categories per run could absorb. Normally a no-op,
+      # because it only fetches for rows that have no category yet.
+      - name: Reconcile symbol reference data
+        if: github.event_name == 'schedule' || inputs.source == 'all' || inputs.source == 'symbols'
+        continue-on-error: true
+        run: pnpm tsx scripts/backfill/backfill-nepse-symbols.ts && echo 'symbols ok' >> "$RUNNER_TEMP/reconcile.txt" || { echo 'symbols FAILED' >> "$RUNNER_TEMP/reconcile.txt"; exit 1; }
 
       - name: Reconcile precious metals history
         if: github.event_name == 'schedule' || inputs.source == 'all' || inputs.source == 'metals'

@@ -24,9 +24,10 @@
  */
 
 import * as cheerio from 'cheerio';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { appendRows, symbolToFileName } from '../lib/csv-store';
+import { appendRows, readRows, symbolToFileName, symbolToKey, upsertRows } from '../lib/csv-store';
+import { classifyCategory, fetchSector, fetchSymbolNames } from '../lib/nepse-symbols';
 
 const SHARESANSAR_URL = 'https://www.sharesansar.com/today-share-price';
 const NEPSE_INDEX_URL = 'https://www.sharesansar.com/index-history-data';
@@ -35,6 +36,20 @@ const NEPSE_INDEX_LOOKBACK_DAYS = 30;
 const NEPSE_DIR = join(process.cwd(), 'data', 'nepse');
 const HEADER = ['published_date', 'open', 'high', 'low', 'close', 'per_change', 'traded_quantity', 'traded_amount', 'status'];
 const STATUS = 'A';
+
+const REFERENCE_FILE = join(process.cwd(), 'data', 'reference', 'nepse-symbols.csv');
+const REFERENCE_HEADER = ['symbol', 'name', 'source_category', 'instrument_type', 'sector', 'status'];
+const NOT_A_COMPANY = new Set(['NEPSE_INDEX']);
+
+/**
+ * A symbol's category costs one request, so only a handful are fetched per run.
+ *
+ * On a normal day this is zero: every tracked symbol is already categorised, and the loop makes no
+ * requests at all. It only does work when a new scrip lists, which is exactly when the mapping needs
+ * updating. The cap means an unusual batch of new listings drains over a few days instead of adding
+ * minutes to the run that also has to commit the day's prices.
+ */
+const MAX_SECTOR_FETCHES_PER_RUN = 15;
 
 interface StockRow {
   symbol: string;
@@ -157,6 +172,100 @@ async function fetchNepseIndexHistory(): Promise<IndexHistoryRow[]> {
   }
 }
 
+/**
+ * Keeps `data/reference/nepse-symbols.csv` in step with the symbols this repo tracks.
+ *
+ * This is what makes a NEW LISTING self-describing. The scraper already auto-creates `<SYMBOL>.csv`
+ * the first time a scrip appears in the price table; this gives that symbol its company name the same
+ * day (one request covers the whole market) and its sector the same day or shortly after (one request
+ * per symbol, capped by `MAX_SECTOR_FETCHES_PER_RUN`). No manual step, no separate schedule.
+ *
+ * Never allowed to break the run. The day's prices are the job and reference data is a bonus, so
+ * every failure here is a warning and the caller carries on. Because `upsertRows` ignores blank
+ * incoming values, the name pass cannot wipe sectors and the sector pass cannot wipe names, which is
+ * what lets the two run at different cadences against the same file.
+ */
+async function refreshSymbolReference(): Promise<void> {
+  try {
+    const tracked = new Set(
+      readdirSync(NEPSE_DIR)
+        .filter(name => name.endsWith('.csv'))
+        .map(name => name.replace(/\.csv$/, ''))
+        .filter(key => !NOT_A_COMPANY.has(key))
+    );
+
+    // The source symbol is kept beside the repo's key because a fiscal-year debenture's company URL
+    // needs the original slash (`GBILD84/85`), which the key form has already replaced.
+    const sourceByKey = new Map<string, string>();
+    const nameByKey = new Map<string, string>();
+    for (const entry of await fetchSymbolNames()) {
+      const key = symbolToKey(entry.symbol);
+      if (!tracked.has(key)) continue;
+      sourceByKey.set(key, entry.symbol);
+      nameByKey.set(key, entry.name);
+    }
+
+    // A row is written for every TRACKED symbol, not just the ones the source could name. A newly
+    // listed scrip shows up in the price table before the company-list search index catches up, so
+    // keying this off the source's list meant such a symbol got a price file and then nothing at all:
+    // no reference row, and therefore never a candidate for the category pass below either. It stayed
+    // invisible until the source happened to catch up, with nothing anywhere saying so.
+    //
+    // Writing the row with a blank name instead makes the gap visible in the data, lets the category
+    // pass pick it up immediately, and costs nothing: `upsertRows` ignores blank incoming values, so
+    // the name fills itself in on the first run after the source lists it.
+    const nameRows = [...tracked]
+      .sort()
+      .map((key): Record<string, string> => {
+        const name = nameByKey.get(key);
+        return name ? { symbol: key, name } : { symbol: key };
+      });
+
+    const { added, updated } = upsertRows(REFERENCE_FILE, REFERENCE_HEADER, 'symbol', nameRows);
+    if (added > 0 || updated > 0) {
+      console.log(`Symbol reference: ${added} new symbol(s), ${updated} name change(s).`);
+    }
+
+    const unnamed = [...tracked].filter(key => !nameByKey.has(key)).sort();
+    if (unnamed.length > 0) {
+      console.warn(
+        `Symbol reference: ${unnamed.length} tracked symbol(s) have no name in the source yet ` +
+          `(${unnamed.join(', ')}). Their rows exist and will fill in once the source lists them.`
+      );
+    }
+
+    const missing = readRows(REFERENCE_FILE).filter(row => row.symbol && !row.source_category);
+    if (missing.length === 0) return;
+
+    const batch = missing.slice(0, MAX_SECTOR_FETCHES_PER_RUN);
+    const sectorRows: Array<Record<string, string>> = [];
+    for (const row of batch) {
+      const key = row.symbol ?? '';
+      try {
+        const category = await fetchSector(sourceByKey.get(key) ?? key);
+        if (category) {
+          const { instrumentType, sector, status } = classifyCategory(category);
+          sectorRows.push({
+            symbol: key,
+            source_category: category,
+            instrument_type: instrumentType,
+            sector,
+            status
+          });
+        }
+      } catch (error) {
+        console.warn(`Symbol reference: sector lookup for ${key} failed (${error instanceof Error ? error.message : error}).`);
+      }
+    }
+    if (sectorRows.length > 0) upsertRows(REFERENCE_FILE, REFERENCE_HEADER, 'symbol', sectorRows);
+    console.log(
+      `Symbol reference: categorised ${sectorRows.length} symbol(s), ${missing.length - batch.length} still pending.`
+    );
+  } catch (error) {
+    console.warn(`Symbol reference: skipped (${error instanceof Error ? error.message : error}).`);
+  }
+}
+
 async function main() {
   let tradingDate: string | null = null;
   let rows: StockRow[] = [];
@@ -202,6 +311,10 @@ async function main() {
   if (rows.length > 0) {
     console.log(`Scraped ${rows.length} symbol(s) for ${tradingDate}, appended ${appended} row(s), auto-created ${created} new symbol file(s).`);
   }
+
+  // Deliberately before the index section, which returns early when the endpoint answers with
+  // nothing: the reference table has no bearing on the index and should not be skipped because of it.
+  await refreshSymbolReference();
 
   const indexHistory = await fetchNepseIndexHistory();
   if (indexHistory.length === 0) {

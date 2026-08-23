@@ -23,6 +23,8 @@ data/
   nepse/<SYMBOL>.csv          one file per listed scrip, plus NEPSE_INDEX.csv
   precious-metals/            gold-24k.csv, gold-22k.csv, silver.csv
   sip-mutual-funds/<SYMBOL>.csv   one file per fund
+  reference/nepse-symbols.csv     symbol to name, instrument type, sector, status
+  reference/sip-mutual-funds.csv  fund symbol to name and AMC
 scripts/
   daily/                      one script per source, run by GitHub Actions
   backfill/                   one script per source, run by hand to seed history
@@ -113,6 +115,71 @@ Closed-end mutual funds that trade on NEPSE like ordinary stocks (e.g. NIBL Grow
 covered by `data/nepse/`, not here, since their price is set by the exchange rather than an AMC's
 published NAV.
 
+### `data/reference/`
+
+Not time series. These two tables are what turn a ticker into something meaningful, and they are the
+only files here that are **upserted** rather than appended: a renamed company's row is corrected in
+place rather than gaining a second row.
+
+#### `nepse-symbols.csv`
+
+One row per symbol, keyed to join one-to-one with `data/nepse/`:
+
+```
+symbol,name,source_category,instrument_type,sector,status
+NABIL,Nabil Bank Limited,Commercial Bank,ordinary,Commercial Bank,listed
+ADBLD83,10.35% Agricultural Bank Debenture 2083,Corporate Debentures,debenture,,listed
+KBLPO,Kumari Bank Limited Promotor Share,Promoter Share,promoter_share,,listed
+BOKL,Bank of Kathmandu Limited,Merged,ordinary,,merged
+```
+
+`symbol` is the file-name form, so `GBILD84-85` here is `data/nepse/GBILD84-85.csv`. A dozen
+fiscal-year debentures are named with a slash at the source (`GBILD84/85`), which becomes a hyphen
+because a slash in a file name would create a directory.
+
+**Why four columns instead of one.** The source publishes a single "Sector" field that answers four
+different questions at once: it says `Hydropower` for a hydro company, but `Corporate Debentures` for
+a bond, `Promoter Share` for a promoter tranche, and `Merged` for a company that no longer exists. So
+the raw string is kept verbatim in `source_category` and decomposed beside it:
+
+| column | values | use |
+|---|---|---|
+| `instrument_type` | `ordinary`, `debenture`, `mutual_fund`, `promoter_share`, `government_bond` | what kind of security this is |
+
+`government_bond` follows the source's own label and is looser than it sounds: both rows carrying it
+(`HBLD86`, `JBBD87`) are commercial bank bonds that sharesansar files under "Government Bonds". The
+label is kept as the source states it rather than reinterpreted, and `source_category` preserves the
+original string either way.
+| `sector` | industry only, blank when unknown | filtering by industry |
+| `status` | `listed`, `merged` | excluding companies that no longer trade |
+
+This matters more than it sounds: of 432 symbols only **274 are ordinary listed equities**. The other
+158 are debentures, bonds, promoter shares, closed-end funds, or merged shells, whose price moves are
+not comparable to a share's. Ranking "top movers" or charting a sector without filtering on
+`instrument_type` and `status` will mix them in.
+
+`sector` is deliberately blank rather than guessed where the source gave an instrument type or a
+status instead of an industry. In particular no industry is inferred for promoter shares: only 6 of
+the 15 have a base symbol that is both derivable (the suffix varies between `PO` and `P`) and tracked
+here, so filling the rest would be fabrication.
+
+A new listing gets its name on the day it first trades and its category within a few days, with no
+manual step: names come from one request covering the whole market, categories from one request per
+symbol, capped per run.
+
+#### `sip-mutual-funds.csv`
+
+The same idea for the open-end funds, which are hand-maintained because each new SIP already needs a
+bespoke scraper anyway:
+
+```
+symbol,name,amc
+SFF,Sanima Flexi Fund,Sanima Capital
+```
+
+`amc` is blank for `SLK`, whose NAV source is `lscapital.com.np` and whose managing company could not
+be confirmed with enough certainty to state it here.
+
 ## How the data is collected
 
 Three scraper workflows run on a schedule, each fetching directly from public sources
@@ -128,7 +195,7 @@ back to this repo. A fourth reconciles history weekly, described under Self-heal
 
 Only NEPSE is weekday-only, because only the stock market actually closes at weekends. Metals and
 mutual funds run all seven days: FENEGOSIDA posts gold rates on Sundays and on roughly half of
-Saturdays, and 13 of the 14 funds publish NAV on every calendar day. Since each source posts a day's
+Saturdays, and 12 of the 14 funds publish NAV on every calendar day. Since each source posts a day's
 value the following day, a weekday-only schedule never even asked for Friday's or Saturday's figure.
 
 No secrets or database credentials are needed; every source is a public, unauthenticated endpoint.
