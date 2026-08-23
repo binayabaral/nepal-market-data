@@ -3,7 +3,7 @@ name: Reconcile history
 on:
   schedule:
     # 04:00 Nepal Time (UTC+5:45) on Mondays = 22:15 UTC Sunday. Deliberately far from every daily
-    # cron (05:15, 09:15, 10:15 UTC) so the two never contend for the branch.
+    # cron (05:15 and 10:15 UTC) so the two never contend for the branch.
     - cron: '15 22 * * 0'
   workflow_dispatch:
     inputs:
@@ -93,8 +93,8 @@ jobs:
             echo "Nothing was missing, no rows recovered."
             exit 0
           fi
-          # Nepal time, not UTC, so the message names the same day the rows are dated.
-          git commit -m "chore: reconcile historical data for $(TZ=Asia/Kathmandu date +%F)"
+          # Subject names the dates actually staged: rows are source-dated, not run-dated.
+          git commit -m "$(bash scripts/ci/data-commit-message.sh 'chore: reconcile historical data')"
           for attempt in 1 2 3; do
             if git push; then exit 0; fi
             echo "Push rejected (attempt $attempt), rebasing onto the latest ${GITHUB_REF_NAME:-main} and retrying."

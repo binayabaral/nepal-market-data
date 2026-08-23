@@ -49,8 +49,8 @@ jobs:
             echo "No changes to commit."
             exit 0
           fi
-          # Nepal time, not UTC, so the message names the same day the rows are dated.
-          git commit -m "chore: update precious metals data for $(TZ=Asia/Kathmandu date +%F)"
+          # Subject names the dates actually staged: rows are source-dated, not run-dated.
+          git commit -m "$(bash scripts/ci/data-commit-message.sh 'chore: update precious metals data')"
           for attempt in 1 2 3; do
             if git push; then exit 0; fi
             echo "Push rejected (attempt $attempt), rebasing onto the latest ${GITHUB_REF_NAME:-main} and retrying."

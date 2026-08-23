@@ -2,8 +2,9 @@ name: Scrape NEPSE
 
 on:
   schedule:
-    # 3:00 PM Nepal Time (UTC+5:45) = 09:15 UTC, Monday-Friday: NEPSE market close.
-    - cron: '15 9 * * 1-5'
+    # 4:00 PM Nepal Time (UTC+5:45) = 10:15 UTC, Monday-Friday. Not earlier: NEPSE closes at 15:00
+    # but sharesansar posts the finished session 15:35-15:50, so a close-time run scraped yesterday.
+    - cron: '15 10 * * 1-5'
   workflow_dispatch:
 
 concurrency:
@@ -47,8 +48,8 @@ jobs:
             echo "No changes to commit."
             exit 0
           fi
-          # Nepal time, not UTC, so the message names the same day the rows are dated.
-          git commit -m "chore: update NEPSE data for $(TZ=Asia/Kathmandu date +%F)"
+          # Subject names the dates actually staged: rows are source-dated, not run-dated.
+          git commit -m "$(bash scripts/ci/data-commit-message.sh 'chore: update NEPSE data')"
           for attempt in 1 2 3; do
             if git push; then exit 0; fi
             echo "Push rejected (attempt $attempt), rebasing onto the latest ${GITHUB_REF_NAME:-main} and retrying."
