@@ -2,10 +2,13 @@ name: Scrape SIP Mutual Fund NAVs
 
 on:
   schedule:
-    # 4:00 PM Nepal Time (UTC+5:45) = 10:15 UTC, every day. 13 of the 14 funds publish NAV on all
+    # 5:00 PM Nepal Time (UTC+5:45) = 11:15 UTC, every day. Chosen to clear NEPSE entirely: that
+    # workflow's GitHub backstop starts 30-40 min after its own 10:15 cron, so 10:15-10:56 UTC is
+    # effectively occupied. NAV timing itself is indifferent, since every source posts day D's NAV on
+    # D+1 and the scraper backfills a window. 13 of the 14 funds publish NAV on all
     # seven calendar days, and every source posts day D's NAV on D+1, so a Monday-Friday schedule
     # never asked for Friday's or Saturday's value at all.
-    - cron: '15 10 * * *'
+    - cron: '15 11 * * *'
   workflow_dispatch:
 
 concurrency:

@@ -3,7 +3,7 @@ name: Reconcile history
 on:
   schedule:
     # 04:00 Nepal Time (UTC+5:45) on Mondays = 22:15 UTC Sunday. Deliberately far from every daily
-    # cron (05:15 and 10:15 UTC) so the two never contend for the branch.
+    # cron (05:15, 10:15 and 11:15 UTC) so the two never contend for the branch.
     - cron: '15 22 * * 0'
   workflow_dispatch:
     inputs:
