@@ -68,7 +68,10 @@ missing-rather-than-repeated rule described under gaps below.
 `NEPSE_INDEX.csv` carries the headline NEPSE index with real session `open`/`high`/`low`/`close`
 and `per_change`, and market-wide turnover in `traded_amount`. `traded_quantity` is blank, since the
 index has no share count of its own. Every index row is a completed session's close, dated to the
-same session as the stock rows, never an intraday snapshot.
+same session as the stock rows, never an intraday snapshot. It goes back to 1997-07-20. Sessions
+before roughly 2000 carry the index level only, so `open`/`high`/`low` repeat the close and
+`traded_amount` is `0.00`; that is what the source holds for that era, not a gap introduced here.
+The months missing from 2020 are the real NEPSE closure, not absent data.
 
 ### `data/precious-metals/`
 
