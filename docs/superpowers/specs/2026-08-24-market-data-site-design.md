@@ -1,7 +1,12 @@
 # Nepal Market Data: public site design
 
 **Date:** 2026-08-24
-**Status:** design approved, implementation not started
+**Status:** paused 2026-08-24 awaiting review. The approach was approved in conversation; this
+written spec has **not** been reviewed. Nothing is built. Next step after review: an implementation
+plan via the `writing-plans` skill.
+
+**Blocked on a manual step:** GitHub Pages must be enabled on this repo with source = GitHub Actions
+before any deploy can succeed. Not done as of 2026-08-24.
 **Design system:** `design-system/nepal-market-data/MASTER.md` (tokens, chart rules, anti-patterns)
 
 ## Goal
