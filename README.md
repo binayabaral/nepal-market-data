@@ -153,10 +153,16 @@ original string either way.
 | `sector` | industry only, blank when unknown | filtering by industry |
 | `status` | `listed`, `merged` | excluding companies that no longer trade |
 
-This matters more than it sounds: of 432 symbols only **274 are ordinary listed equities**. The other
-158 are debentures, bonds, promoter shares, closed-end funds, or merged shells, whose price moves are
-not comparable to a share's. Ranking "top movers" or charting a sector without filtering on
-`instrument_type` and `status` will mix them in.
+This matters more than it sounds: of 432 symbols only **284 are ordinary listed equities**
+(`instrument_type = ordinary` and `status = listed`). The other 148 are debentures, bonds, promoter
+shares, closed-end funds, or merged shells, whose price moves are not comparable to a share's.
+Ranking "top movers" or charting a sector without filtering on `instrument_type` and `status` will
+mix them in.
+
+Filter on those two columns, **not** on "has a sector". 10 of the 284 have a blank `sector` because
+the source files them under `Others` or `Non Category`, and they include Nepal Doorsanchar (NTC),
+Nepal Reinsurance and Himalayan Reinsurance. They are ordinary listed shares and belong in any
+market-wide view.
 
 `sector` is deliberately blank rather than guessed where the source gave an instrument type or a
 status instead of an industry. In particular no industry is inferred for promoter shares: only 6 of
