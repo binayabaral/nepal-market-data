@@ -1,9 +1,10 @@
 # Nepal Market Data: public site design
 
 **Date:** 2026-08-24
-**Status:** paused 2026-08-24 awaiting review. The approach was approved in conversation; this
-written spec has **not** been reviewed. Nothing is built. Next step after review: an implementation
-plan via the `writing-plans` skill.
+**Status:** reviewed and approved 2026-08-24. The three open review questions were answered: a page
+for every symbol and reachable from the table, the merged-symbol banner is correct, and 6M stays the
+chart default with All available. Nothing is built. Next step: an implementation plan via the
+`writing-plans` skill.
 
 **Pages is enabled** (2026-08-24): `build_type: workflow`, serving at
 `https://binayabaral.github.io/nepal-market-data/`. Nothing deployed yet, which is why the API
@@ -102,6 +103,10 @@ files are far smaller.
 
 451 pages total. All prerendered.
 
+Reviewed and confirmed 2026-08-24: **every** symbol gets its own page, debentures and promoter shares
+included, and every symbol is also reachable from the landing table. The market-wide filter below
+governs aggregates such as top movers, not who gets a page.
+
 ### The filtering rule every market-wide view must apply
 
 `instrument_type == 'ordinary' && status == 'listed'` → **284** of 432 symbols.
@@ -138,9 +143,14 @@ Full tokens and rules in `design-system/nepal-market-data/MASTER.md`. The load-b
 lightweight-charts (TradingView, Apache 2.0), self-hosted, the only hydrated island
 (`client:visible`).
 
-- **Never render full history at once.** Candlestick legibility caps out around 500 candles, and
-  NABIL has 3,484 rows while the index has 6,685. Range selector 1M / 6M / 1Y / 5Y / All, defaulting
-  to 6M.
+- **Range selector 1M / 6M / 1Y / 5Y / All, defaulting to 6M.** Reviewed 2026-08-24: 6M confirmed as
+  the default, and All must stay available.
+- **Candles below 1Y, a close-only line at 5Y and All.** Candlestick legibility caps out near 500
+  candles while NABIL has 3,484 rows and the index 6,685, so full history cannot be drawn as candles.
+  Switching representation keeps All reachable without rendering an unreadable smear. Rejected the
+  alternative of downsampling to weekly or monthly candles: more code, and it draws an OHLC bar for a
+  period no single session actually traded. The switch is announced in the chart's caption so the
+  change in representation is never silent.
 - Candles: bullish filled, bearish hollow. Volume beneath at 40% opacity.
 - **The OHLC table is the accessibility fallback, not a bonus.** Candlestick charts grade B for
   accessibility; the sortable table plus a numeric change summary is what carries the page for screen

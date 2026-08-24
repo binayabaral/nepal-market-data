@@ -117,8 +117,10 @@ fallbacks matter):
 
 - **Library:** lightweight-charts. Canvas-based, handles the volume, purpose-built for OHLC.
 - **Max ~500 candles visible at once.** History runs to 3,484 rows for NABIL and 6,685 index
-  sessions, so ship a range selector (1M / 6M / 1Y / 5Y / All) defaulting to a recent window. Never
-  render all history at once.
+  sessions, so ship a range selector (1M / 6M / 1Y / 5Y / All) defaulting to **6M**.
+- **Candles at 1M / 6M / 1Y; a close-only line at 5Y and All.** All history must stay reachable, and
+  it cannot be drawn as candles at a legible size, so the representation changes instead of the range
+  being removed. Say so in the chart caption; never switch silently.
 - **Market-wide views filter on `instrument_type = ordinary` AND `status = listed`** (284 of 432
   symbols), never on "has a sector". 10 of those 284 have a blank sector, including Nepal
   Doorsanchar (NTC); the sector test would drop them.
