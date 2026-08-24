@@ -5,8 +5,9 @@
 written spec has **not** been reviewed. Nothing is built. Next step after review: an implementation
 plan via the `writing-plans` skill.
 
-**Blocked on a manual step:** GitHub Pages must be enabled on this repo with source = GitHub Actions
-before any deploy can succeed. Not done as of 2026-08-24.
+**Pages is enabled** (2026-08-24): `build_type: workflow`, serving at
+`https://binayabaral.github.io/nepal-market-data/`. Nothing deployed yet, which is why the API
+reports `status: null`. This confirms the `base` path below.
 **Design system:** `design-system/nepal-market-data/MASTER.md` (tokens, chart rules, anti-patterns)
 
 ## Goal
@@ -47,7 +48,8 @@ charts fetch CSVs at runtime. A rebuild only refreshes prerendered numbers and t
 
 ### Base path
 
-`site/astro.config.mjs` reads `base` from an env var, defaulting to `/nepal-market-data/`. Moving to
+`site/astro.config.mjs` reads `base` from an env var, defaulting to `/nepal-market-data/`, which is
+the path GitHub reports for this repo's Pages site. Moving to
 a custom domain means setting it to `/` in one place. Every internal link and fetch is built from
 `import.meta.env.BASE_URL`; no hardcoded absolute paths.
 
@@ -185,9 +187,8 @@ opposite of the scrapers' `cancel-in-progress: false`.
 Data commits land 3-4 times a day, so the site rebuilds that often. The build is seconds; the
 artifact is ~30MB, dominated by `data/`.
 
-**Manual prerequisite:** GitHub Pages is not yet enabled on this repo (the API returned 404 on
-2026-08-23). Enabling it, with source set to GitHub Actions, is a repo-settings action that has to be
-done by hand before the first deploy can succeed.
+**Manual prerequisite: done.** Pages was enabled by hand on 2026-08-24 with source = GitHub Actions
+(`build_type: workflow`). No deploy has run yet.
 
 ## Risks
 
