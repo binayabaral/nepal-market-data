@@ -1,10 +1,12 @@
 ---
+import { join } from 'node:path';
 import { readRows } from '../../../../scripts/lib/csv-store';
 import Base from '../../layouts/Base.astro';
 import ChartMount from '../../components/ChartMount.astro';
 import OhlcTable from '../../components/OhlcTable.astro';
 import { byKind } from '../../lib/manifest';
 import { changeClass, csvPath, formatChange, formatNumber } from '../../lib/format';
+import { DATA_DIR } from '../../lib/dataDir';
 
 export function getStaticPaths() {
   // Every symbol gets a page, debentures and promoter shares included (reviewed 2026-08-24). The
@@ -15,10 +17,15 @@ export function getStaticPaths() {
 
 const { entry } = Astro.props;
 // Read from data/, not from the public/ copy, so a page is never built against a stale sync.
-const rows = readRows(`data/nepse/${entry.symbol}.csv`);
+// DATA_DIR is an absolute path (see lib/dataDir.ts) so this resolves correctly regardless of which
+// directory `astro build` was invoked from. A bare relative path here resolved against `site/` (the
+// cwd `pnpm --dir site build` uses), so readRows silently returned [] and every OHLC table shipped
+// empty; DATA_DIR is the fix, shared with the funds and metals pages.
+const rows = readRows(join(DATA_DIR, `nepse/${entry.symbol}.csv`));
 // entry.status comes from the reference table (listed/merged), never the price CSV's status column
 // (always "A", carries no information). Conflating the two would banner every live company.
 const merged = entry.status === 'merged';
+const shown = Math.min(rows.length, 60);
 ---
 
 <Base
@@ -31,7 +38,7 @@ const merged = entry.status === 'merged';
   </p>
 
   {merged && (
-    <p role="note" style="border:1px solid var(--border);border-left:3px solid var(--destructive);border-radius:var(--radius);padding:var(--space-lg);background:var(--muted)">
+    <p role="status" style="border:1px solid var(--border);border-left:3px solid var(--destructive);border-radius:var(--radius);padding:var(--space-lg);background:var(--muted)">
       This company no longer trades on NEPSE. Its last recorded session was {entry.latestDate}. It is
       excluded from market-wide views, and the history below is kept for reference.
     </p>
@@ -47,6 +54,9 @@ const merged = entry.status === 'merged';
   <ChartMount csvUrl={csvPath(entry)} kind="ohlc" valueColumn="close" hasVolume={entry.hasVolume} label={`${entry.symbol} ${entry.name}`} />
 
   <h2>Recent sessions</h2>
+  <p style="color:var(--muted-foreground);font-size:12px;margin-top:0">
+    Most recent {formatNumber(shown, 0)} of {formatNumber(entry.rows, 0)} sessions. Columns are sortable.
+  </p>
   <OhlcTable rows={rows} hasVolume={entry.hasVolume} />
 
   <p><a href={csvPath(entry)} download>Download the full {entry.symbol} history as CSV</a> ({formatNumber(entry.rows, 0)} rows from {entry.firstDate}).</p>

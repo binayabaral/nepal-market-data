@@ -1,0 +1,59 @@
+---
+import { join } from 'node:path';
+import { readRows } from '../../../../scripts/lib/csv-store';
+import { loadFundRefs } from '../../../../scripts/site/load-symbols';
+import Base from '../../layouts/Base.astro';
+import ChartMount from '../../components/ChartMount.astro';
+import LineTable from '../../components/LineTable.astro';
+import { byKind } from '../../lib/manifest';
+import { changeClass, csvPath, formatChange, formatNumber } from '../../lib/format';
+import { DATA_DIR } from '../../lib/dataDir';
+
+export function getStaticPaths() {
+  return byKind('fund').map(entry => ({ params: { symbol: entry.symbol }, props: { entry } }));
+}
+
+const { entry } = Astro.props;
+// Read from data/, not from the public/ copy, so a page is never built against a stale sync.
+// DATA_DIR is an absolute path (see lib/dataDir.ts) so this resolves correctly no matter which
+// directory `astro build` was invoked from.
+const rows = readRows(join(DATA_DIR, `sip-mutual-funds/${entry.symbol}.csv`));
+// AMC is read from the reference table, not derived. A blank amc (SLK: unconfirmed) omits the line
+// entirely below, rather than rendering an empty label or a guess.
+const ref = loadFundRefs(DATA_DIR).find(r => r.symbol === entry.symbol);
+const amc = ref?.amc ?? '';
+// CSBY and SFF publish on weekdays only; every other fund (this dataset has 14) may have gaps on
+// any day, so the weekday note is scoped to just these two symbols.
+const weekdayOnly = entry.symbol === 'CSBY' || entry.symbol === 'SFF';
+---
+
+<Base
+  title={`${entry.symbol} ${entry.name} NAV history | Nepal Market Data`}
+  description={`Daily NAV for ${entry.name} (${entry.symbol}), ${entry.firstDate} to ${entry.latestDate}. Free CSV download.`}
+>
+  <h1 style="margin:0">{entry.symbol}</h1>
+  <p style="margin:var(--space-sm) 0 var(--space-xl);color:var(--muted-foreground)">
+    {entry.name}{entry.sector ? ` · ${entry.sector}` : ''} · {entry.instrumentType.replace(/_/g, ' ')}
+    {amc ? ` · ${amc}` : ''}
+  </p>
+
+  <div style="display:flex;gap:var(--space-2xl);flex-wrap:wrap;margin:var(--space-xl) 0">
+    <div><div style="color:var(--muted-foreground);font-size:12px">Last NAV</div><div class="num" style="font-size:24px">{formatNumber(entry.latestClose)}</div></div>
+    <div><div style="color:var(--muted-foreground);font-size:12px">Change</div><div class:list={['num', changeClass(entry.changePct)]} style="font-size:24px">{formatChange(entry.changePct)}</div></div>
+    <div><div style="color:var(--muted-foreground);font-size:12px">As of</div><div class="num" style="font-size:24px">{entry.latestDate}</div></div>
+    <div><div style="color:var(--muted-foreground);font-size:12px">Sessions</div><div class="num" style="font-size:24px">{formatNumber(entry.rows, 0)}</div></div>
+  </div>
+
+  <p role="note" style="border:1px solid var(--border);border-radius:var(--radius);padding:var(--space-lg);background:var(--muted);color:var(--muted-foreground)">
+    NAV is published a day behind: every source posts day D's NAV on D+1, so a missing same-day
+    value is normal, not an error.
+    {weekdayOnly && ` ${entry.symbol} publishes on weekdays only, so weekend gaps are expected.`}
+  </p>
+
+  <ChartMount csvUrl={csvPath(entry)} kind="line" valueColumn="nav" hasVolume={false} label={`${entry.symbol} ${entry.name}`} />
+
+  <h2>Recent NAVs</h2>
+  <LineTable rows={rows} valueColumn="nav" valueLabel="NAV" />
+
+  <p><a href={csvPath(entry)} download>Download the full {entry.symbol} history as CSV</a> ({formatNumber(entry.rows, 0)} rows from {entry.firstDate}).</p>
+</Base>
