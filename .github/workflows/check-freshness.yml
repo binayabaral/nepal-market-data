@@ -1,0 +1,43 @@
+name: Check Data Freshness
+
+on:
+  schedule:
+    # 18:45 Nepal Time (UTC+5:45) = 13:00 UTC, every day. After every scraper has had its turn: the
+    # last one is mutual funds at 11:15 UTC, plus its GitHub backstop around 11:45.
+    - cron: '0 13 * * *'
+  workflow_dispatch:
+
+# Deliberately triggered by GitHub's own schedule and NOT by the Cloudflare Worker. This is the check
+# that watches the pipeline, so it must not depend on the piece most likely to fail: if the Worker
+# stops dispatching, every dataset goes stale and this is what says so.
+
+concurrency:
+  # Its own group, not the shared `commit-data`. That group serialises workflows that push to the
+  # branch; this one only reads. cancel-in-progress is safe because the check is idempotent.
+  group: check-freshness
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.14.0
+          run_install: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check every dataset for staleness
+        run: pnpm tsx scripts/ci/check-freshness.ts

@@ -9,7 +9,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "freshness": "tsx scripts/ci/check-freshness.ts"
   },
   "dependencies": {
     "tsx": "^4.19.2",
