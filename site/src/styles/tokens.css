@@ -21,6 +21,8 @@
   --space-2xl: 24px;
   --space-3xl: 32px;
 
+  --content-max-width: 1440px;
+
   --table-row-height: 36px;
   --card-padding: 12px;
   --grid-gap: 8px;
@@ -75,7 +77,70 @@ body {
 .up { color: var(--primary); }
 .down { color: var(--destructive); }
 
+/*
+ * One shared container convention for the header's content, main, and the footer's content: the
+ * same max-width and horizontal padding in all three, so the brand, the nav's first item, the
+ * page h1 and the footer text share one left edge. The header/footer BACKGROUNDS and BORDERS stay
+ * full-width by living on the <header>/<footer> elements themselves; only this inner wrapper is
+ * constrained.
+ */
+.container {
+  max-width: var(--content-max-width);
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: var(--space-xl);
+  padding-right: var(--space-xl);
+}
+
 .table-wrap { overflow-x: auto; }
+
+/* Dashboard section-navigation cards (index.astro). Kept in this global stylesheet rather than a
+   scoped <style> block in the page so the page's markup doesn't pick up Astro's data-astro-cid-*
+   scoping attribute, which the smoke test's HTML pattern-matching does not expect. Navigation
+   chrome, not a data region: the green rule permits green accents here. */
+.section-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--grid-gap);
+  margin-bottom: var(--space-2xl);
+}
+
+.section-card {
+  display: block;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--card-padding);
+  background: var(--card);
+  color: var(--foreground);
+  text-decoration: none;
+  transition: border-color 150ms ease-out;
+}
+
+.section-card:hover,
+.section-card:focus-visible {
+  border-color: var(--primary);
+}
+
+.section-card-title {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--primary);
+}
+
+.section-card-meta {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--muted-foreground);
+  margin-top: var(--space-xs);
+}
+
+.section-card-desc {
+  font-size: 13px;
+  color: var(--muted-foreground);
+  margin: var(--space-sm) 0 0;
+}
 
 table { border-collapse: collapse; width: 100%; }
 th, td { padding: 0 var(--space-lg); height: var(--table-row-height); border-bottom: 1px solid var(--border); text-align: left; }

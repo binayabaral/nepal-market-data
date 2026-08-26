@@ -1,5 +1,6 @@
 ---
 import '../styles/tokens.css';
+import { byKind } from '../lib/manifest';
 
 interface Props {
   title: string;
@@ -8,6 +9,31 @@ interface Props {
 
 const { title, description } = Astro.props;
 const base = import.meta.env.BASE_URL;
+
+// Counts are derived from the manifest at build time, never hardcoded, so a scraper adding or
+// dropping a symbol updates the nav automatically on the next build.
+const stockCount = byKind('stock').length;
+const fundCount = byKind('fund').length;
+const metalCount = byKind('metal').length;
+
+// Astro.url.pathname includes the base (e.g. "/nepal-market-data/stocks/NABIL/"), so "active" is
+// computed by prefix against `${base}<section>`, not by exact match, and a symbol page like
+// /stocks/NABIL/ marks Stocks active, not just the exact /stocks/ index.
+const path = Astro.url.pathname;
+const rootPaths = new Set([base, base.slice(0, -1) || '/']);
+
+function isActive(section: string): boolean {
+  if (section === '') return rootPaths.has(path);
+  return path === `${base}${section}` || path.startsWith(`${base}${section}/`);
+}
+
+const navSections: Array<{ href: string; label: string; section: string; count: number | null }> = [
+  { href: base, label: 'Dashboard', section: '', count: null },
+  { href: `${base}stocks`, label: 'Stocks', section: 'stocks', count: stockCount },
+  { href: `${base}funds`, label: 'Funds', section: 'funds', count: fundCount },
+  { href: `${base}metals`, label: 'Metals', section: 'metals', count: metalCount },
+  { href: `${base}about`, label: 'About', section: 'about', count: null }
+];
 ---
 
 <html lang="en">
@@ -24,22 +50,168 @@ const base = import.meta.env.BASE_URL;
     />
   </head>
   <body>
-    <header style="border-bottom:1px solid var(--border);padding:var(--space-lg) var(--space-xl);display:flex;gap:var(--space-xl);align-items:baseline">
-      <a href={base} style="font-weight:600;text-decoration:none">Nepal Market Data</a>
-      <nav style="display:flex;gap:var(--space-lg)">
-        <a href={base}>Dashboard</a>
-        <a href={`${base}about`}>About</a>
-      </nav>
+    <header class="site-header">
+      <div class="site-header-row site-header-row-brand container">
+        <a href={base} class="brand-link">Nepal Market Data</a>
+        <div class="site-header-meta">
+          <span class="licence-note">MIT licensed</span>
+          <a
+            href="https://github.com/binayabaral/nepal-market-data"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="github-link"
+          >
+            GitHub <span aria-hidden="true">&#8599;</span><span class="sr-only"> (opens in a new tab)</span>
+          </a>
+        </div>
+      </div>
+      <div class="site-header-row site-header-row-nav container">
+        <nav class="site-nav" aria-label="Site sections">
+          {navSections.map(item => (
+            <a href={item.href} aria-current={isActive(item.section) ? 'page' : undefined}>
+              {item.label}
+              {item.count !== null && <span class="nav-count">{item.count}</span>}
+            </a>
+          ))}
+        </nav>
+      </div>
     </header>
-    <main style="max-width:1440px;margin:0 auto;padding:var(--space-2xl) var(--space-xl)">
+    <main class="container" style="padding-top:var(--space-2xl);padding-bottom:var(--space-2xl)">
       <slot />
     </main>
-    <footer style="border-top:1px solid var(--border);padding:var(--space-xl);color:var(--muted-foreground);font-size:12px">
-      <p>
-        Open data, MIT licensed. Source and raw CSVs:
-        <a href="https://github.com/binayabaral/nepal-market-data">github.com/binayabaral/nepal-market-data</a>.
-      </p>
-      <p>Prices are as published by their sources. Nothing here is investment advice.</p>
+
+    <style>
+      /* Sticky, not fixed: it stays in normal document flow, so it never overlaps content on
+         initial layout. It only sits above content while the page is mid-scroll, which is why it
+         carries an opaque background (var(--card)) rather than the page background. */
+      .site-header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: var(--card);
+        border-bottom: 1px solid var(--border);
+      }
+
+      /* Horizontal spacing comes from the shared .container class (tokens.css), applied alongside
+         this in the markup, so the brand, the nav and main/footer content share one left edge. This
+         rule supplies only the vertical padding and the flex behaviour. */
+      .site-header-row {
+        display: flex;
+        align-items: center;
+        gap: var(--space-xl);
+        padding-top: var(--space-md);
+        padding-bottom: var(--space-md);
+      }
+
+      .site-header-row-brand {
+        justify-content: space-between;
+        border-bottom: 1px solid var(--border);
+      }
+
+      /* Brand is chrome, not a data region, so the green rule permits it as the brand colour. */
+      .brand-link {
+        font-weight: 600;
+        font-size: 16px;
+        text-decoration: none;
+        color: var(--primary);
+      }
+
+      .site-header-meta {
+        display: flex;
+        align-items: center;
+        gap: var(--space-lg);
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+
+      .licence-note {
+        white-space: nowrap;
+      }
+
+      .github-link {
+        color: var(--foreground);
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .github-link:hover {
+        text-decoration: underline;
+      }
+
+      /* Row 2 scrolls inside its own wrapper on narrow screens rather than letting the page itself
+         scroll sideways: the same pattern every data table on this site already uses. */
+      .site-header-row-nav {
+        overflow-x: auto;
+        padding-top: 0;
+        padding-bottom: 0;
+      }
+
+      .site-nav {
+        display: flex;
+        gap: var(--space-md);
+        min-width: max-content;
+      }
+
+      .site-nav a {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-sm);
+        min-height: 44px;
+        padding: var(--space-md) var(--space-md);
+        text-decoration: none;
+        color: var(--foreground);
+        border-bottom: 2px solid transparent;
+        white-space: nowrap;
+      }
+
+      .site-nav a:hover {
+        color: var(--primary);
+      }
+
+      /* Active section: aria-current="page" plus a visible underline, not colour alone. Using
+         --primary here is the chrome exception the green rule allows for the active state.
+         font-weight is deliberately NOT part of this rule: a bolder glyph is wider than the
+         regular weight, so toggling it between active/inactive shifted the whole row as the
+         reader moved between pages. Every .site-nav a already carries the same 2px transparent
+         border (see above) so the underline never changes the link's box either. */
+      .site-nav a[aria-current='page'] {
+        color: var(--primary);
+        border-bottom-color: var(--primary);
+      }
+
+      /* Counts sit next to the label as metadata, never as the link text itself: muted, tabular,
+         and never green (the green rule reserves green-as-"up" for data regions and forbids it on
+         chrome counts). */
+      .nav-count {
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+        font-weight: 400;
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+    </style>
+    <footer style="border-top:1px solid var(--border);color:var(--muted-foreground);font-size:12px">
+      <div class="container" style="padding-top:var(--space-xl);padding-bottom:var(--space-xl)">
+        <p>
+          Open data, MIT licensed.
+          <a href="https://github.com/binayabaral/nepal-market-data">Source</a>
+          and
+          <a href="https://github.com/binayabaral/nepal-market-data/tree/main/data">raw CSVs</a>,
+          which are the same files this site reads.
+        </p>
+        <p>Prices are as published by their sources. Nothing here is investment advice.</p>
+      </div>
     </footer>
   </body>
 </html>

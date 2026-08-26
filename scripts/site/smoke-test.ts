@@ -68,7 +68,14 @@ function csvStems(dir: string): string[] {
     .map(name => name.slice(0, -'.csv'.length));
 }
 
-/** Maps a manifest `kind` to its site route segment and data subdirectory. Index has neither a route nor a data dir of its own (it lives in `nepse/` and renders on the landing page). */
+/**
+ * Maps a manifest `kind` to its site route segment and data subdirectory. The index has its own
+ * dedicated page at `/nepse-index/` (added so the deepest series in the dataset, 6,687 rows back
+ * to 1997, has a page and a CSV link like every stock, fund and metal). Unlike the other kinds it
+ * is not `<segment>/<symbol>/`, since there is exactly one index and no symbol directory for it;
+ * `distPagePath` below special-cases it instead of going through `ROUTE_DIR`. Its data still lives
+ * in `nepse/` alongside the stock CSVs (see `DATA_SUBDIR`).
+ */
 const ROUTE_DIR: Record<Exclude<Kind, 'index'>, string> = { stock: 'stocks', fund: 'funds', metal: 'metals' };
 const DATA_SUBDIR: Record<Kind, string> = {
   stock: 'nepse',
@@ -78,7 +85,7 @@ const DATA_SUBDIR: Record<Kind, string> = {
 };
 
 function distPagePath(entry: ManifestEntry): string | null {
-  if (entry.kind === 'index') return null;
+  if (entry.kind === 'index') return join('nepse-index', 'index.html');
   return join(ROUTE_DIR[entry.kind], entry.symbol, 'index.html');
 }
 
@@ -121,12 +128,23 @@ function readLastCsvValue(path: string, column: string): number | null {
 
 const manifest = readManifest();
 const entries = manifest.entries;
-const pageEntries = entries.filter(e => e.kind !== 'index');
+// Every kind gets a page now, the index included (its own /nepse-index/ page), so pageEntries is
+// just all manifest entries; distPagePath handles the index's different route shape.
+const pageEntries = entries;
 
 // --- Assertion (a): page count matches the manifest ------------------------------------------
 
 function checkPageCount(): void {
-  const expectedPaths = new Set<string>(['index.html', join('about', 'index.html')]);
+  // The three section browse pages (/stocks/, /funds/, /metals/) are real index routes alongside
+  // the per-symbol [symbol].astro routes in the same directories, not derived per manifest entry,
+  // so they are listed explicitly here rather than falling out of the pageEntries loop below.
+  const expectedPaths = new Set<string>([
+    'index.html',
+    join('about', 'index.html'),
+    join('stocks', 'index.html'),
+    join('funds', 'index.html'),
+    join('metals', 'index.html')
+  ]);
   for (const entry of pageEntries) {
     const p = distPagePath(entry);
     if (p) expectedPaths.add(p);
@@ -145,7 +163,7 @@ function checkPageCount(): void {
 
   if (expectedPaths.size !== actualSet.size) {
     fail(
-      `page count mismatch: manifest implies ${expectedPaths.size} pages (stock+fund+metal entries plus landing and about), dist has ${actualSet.size} index.html files`
+      `page count mismatch: manifest implies ${expectedPaths.size} pages (stock+fund+metal+index entries plus landing and about), dist has ${actualSet.size} index.html files`
     );
   } else {
     ok(`page count matches the manifest (${actualSet.size} pages)`);
@@ -280,10 +298,16 @@ function checkSampledLatestClose(): void {
     checkPrerenderedLatestClose(entry, join(DIST, p), label);
   }
 
-  // The index has no page of its own; it renders as a KPI card on the landing page.
+  // The index has a KPI card on the landing page AND its own dedicated page at /nepse-index/
+  // (added so the deepest series in the dataset has a page and a CSV link like every other
+  // symbol); both prerendered stats are checked against the same CSV.
   const indexEntry = entries.find(e => e.symbol === 'NEPSE_INDEX');
-  if (indexEntry) checkPrerenderedLatestClose(indexEntry, join(DIST, 'index.html'), 'NEPSE Index');
-  else fail('sample setup: NEPSE_INDEX entry not found in the manifest');
+  if (indexEntry) {
+    checkPrerenderedLatestClose(indexEntry, join(DIST, 'index.html'), 'NEPSE Index');
+    checkPrerenderedLatestClose(indexEntry, join(DIST, 'nepse-index', 'index.html'), 'Last level');
+  } else {
+    fail('sample setup: NEPSE_INDEX entry not found in the manifest');
+  }
 
   const total = sample.length + (indexEntry ? 1 : 0);
   if (total < 20) fail(`sample size is only ${total}, expected at least 20 pages across all four kinds`);

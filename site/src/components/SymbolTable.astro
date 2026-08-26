@@ -1,20 +1,33 @@
 ---
 /**
- * The full symbol directory: every stock, fund and metal entry, so every symbol on the site is
- * reachable from this table (reviewed 2026-08-24). It is not filtered to market-wide symbols; that
- * filter only controls which rows are visible by default.
+ * A symbol directory table, reused across the dashboard and the /stocks/, /funds/ and /metals/
+ * section pages (`kinds` prop controls which rows it lists). It is not filtered to market-wide
+ * symbols; that filter (`isExtra` below) only controls which STOCK rows are hidden by default, and
+ * only stocks: funds and metals are curated primary content with their own section pages and are
+ * never marked data-extra, regardless of where this table appears (reviewed 2026-08-26).
  *
  * Two small inline behaviours, matching OhlcTable's approach: sorting is a tiny vanilla script, not
  * a framework island, and it degrades to a full unfiltered readable table with JavaScript off. Same
- * for the search box and the market-wide toggle: every row is always present in the static HTML,
- * search and the toggle only hide rows with CSS/JS. A no-JS reader, and a search engine, sees every
- * symbol either way.
+ * for the search box and the toggle (when `showToggle` renders it): every row is always present in
+ * the static HTML, search and the toggle only hide rows with CSS/JS. A no-JS reader, and a search
+ * engine, sees every symbol either way.
  */
 import type { Kind, ManifestEntry } from '../../../scripts/site/manifest-types';
 import { byKind } from '../lib/manifest';
 import { changeClass, formatChange, formatNumber } from '../lib/format';
 
-const kinds: Kind[] = ['stock', 'fund', 'metal'];
+interface Props {
+  /** Which kinds of entry this instance of the table lists. Defaults to all three. */
+  kinds?: Kind[];
+  /**
+   * Whether to render the "show non-market-wide" toggle at all. Only stocks are ever hidden by
+   * default (see `isExtra` below), so a table scoped to funds or metals has nothing for the toggle
+   * to reveal and should not render it.
+   */
+  showToggle?: boolean;
+}
+
+const { kinds = ['stock', 'fund', 'metal'], showToggle = true } = Astro.props;
 const rows: ManifestEntry[] = kinds.flatMap(kind => byKind(kind));
 
 function href(entry: ManifestEntry): string {
@@ -23,8 +36,14 @@ function href(entry: ManifestEntry): string {
   return `${base}${dir}/${entry.symbol}`;
 }
 
-function isMarketWide(entry: ManifestEntry): boolean {
-  return entry.instrumentType === 'ordinary' && entry.status === 'listed';
+/**
+ * Only non-market-wide STOCKS are hidden by default. Funds and metals are curated primary content
+ * with their own section pages, not noise alongside debentures and promoter shares, so they are
+ * never marked data-extra, no matter which page this table appears on.
+ */
+function isExtra(entry: ManifestEntry): boolean {
+  if (entry.kind !== 'stock') return false;
+  return !(entry.instrumentType === 'ordinary' && entry.status === 'listed');
 }
 
 function sortValue(n: number | null): string {
@@ -42,10 +61,12 @@ function sortValue(n: number | null): string {
       style="padding:var(--space-sm) var(--space-md);border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--foreground);font:inherit"
     />
   </label>
-  <label style="display:flex;align-items:center;gap:var(--space-sm);cursor:pointer">
-    <input type="checkbox" data-show-extra />
-    <span>Show non-market-wide symbols (debentures, promoter shares, mutual funds, metals, and more)</span>
-  </label>
+  {showToggle && (
+    <label style="display:flex;align-items:center;gap:var(--space-sm);cursor:pointer">
+      <input type="checkbox" data-show-extra />
+      <span>Show debentures, promoter shares, closed-end funds and merged shells</span>
+    </label>
+  )}
   <p data-symbol-count style="margin:0;color:var(--muted-foreground);font-size:12px"></p>
 </div>
 
@@ -65,7 +86,7 @@ function sortValue(n: number | null): string {
     </thead>
     <tbody>
       {rows.map(entry => {
-        const extra = !isMarketWide(entry);
+        const extra = isExtra(entry);
         return (
           <tr data-symbol={entry.symbol.toLowerCase()} data-name={entry.name.toLowerCase()} data-extra={extra ? 'true' : undefined}>
             <td data-sort-value={entry.symbol}><a href={href(entry)}>{entry.symbol}</a></td>

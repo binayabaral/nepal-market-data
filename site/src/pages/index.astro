@@ -1,9 +1,9 @@
 ---
 import Base from '../layouts/Base.astro';
 import ChartMount from '../components/ChartMount.astro';
-import SymbolTable from '../components/SymbolTable.astro';
-import { entries, findEntry, marketWide } from '../lib/manifest';
+import { byKind, entries, findEntry, marketWide } from '../lib/manifest';
 import { changeClass, csvPath, formatChange, formatNumber } from '../lib/format';
+import type { Kind } from '../../../scripts/site/manifest-types';
 
 const index = findEntry('NEPSE_INDEX');
 const gold24 = findEntry('gold-24k');
@@ -28,6 +28,52 @@ const latestDate = entries.reduce((max, entry) => (entry.latestDate > max ? entr
 function moverHref(symbol: string): string {
   return `${import.meta.env.BASE_URL}stocks/${symbol}`;
 }
+
+// Market breadth: advancing / declining / unchanged, counted out of the market-wide total (ordinary,
+// currently listed symbols). Entries with a null changePct (no prior session to compare against) are
+// excluded from the three counts and reported separately, never silently dropped.
+const marketWideEntries = marketWide();
+const comparableEntries = marketWideEntries.filter(entry => entry.changePct !== null);
+const advancingCount = comparableEntries.filter(entry => (entry.changePct as number) > 0).length;
+const decliningCount = comparableEntries.filter(entry => (entry.changePct as number) < 0).length;
+const unchangedCount = comparableEntries.filter(entry => (entry.changePct as number) === 0).length;
+const notComparableCount = marketWideEntries.length - comparableEntries.length;
+
+// Section cards: count and date span derived per kind from the manifest at build time, never
+// hardcoded, so a scraper adding a new symbol updates these on the next build.
+const sectionDefs: Array<{ kind: Kind; label: string; href: string; description: string }> = [
+  {
+    kind: 'stock',
+    label: 'Stocks',
+    href: 'stocks',
+    description: 'Every NEPSE-listed scrip: ordinary shares, debentures, promoter shares, closed-end funds and merged shells.'
+  },
+  {
+    kind: 'fund',
+    label: 'Funds',
+    href: 'funds',
+    description: 'SIP mutual fund NAV history across every listed asset management company.'
+  },
+  {
+    kind: 'metal',
+    label: 'Metals',
+    href: 'metals',
+    description: 'Daily gold and silver rates, per tola, as published by source.'
+  }
+];
+
+const sections = sectionDefs.map(section => {
+  const kindEntries = byKind(section.kind);
+  const sectionFirstDate = kindEntries.reduce(
+    (min, entry) => (entry.firstDate < min ? entry.firstDate : min),
+    kindEntries[0]?.firstDate ?? ''
+  );
+  const sectionLatestDate = kindEntries.reduce(
+    (max, entry) => (entry.latestDate > max ? entry.latestDate : max),
+    kindEntries[0]?.latestDate ?? ''
+  );
+  return { ...section, count: kindEntries.length, firstDate: sectionFirstDate, latestDate: sectionLatestDate };
+});
 ---
 
 <Base
@@ -41,14 +87,17 @@ function moverHref(symbol: string): string {
   </p>
 
   <ChartMount csvUrl={csvPath(index)} kind="ohlc" valueColumn="close" hasVolume={false} label="NEPSE Index" />
+  <p style="margin:var(--space-sm) 0 var(--space-2xl);font-size:12px">
+    <a href={`${import.meta.env.BASE_URL}nepse-index`}>View the full NEPSE Index history and CSV download &rarr;</a>
+  </p>
 
   <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:var(--grid-gap);margin:var(--space-2xl) 0">
-    <div style="border:1px solid var(--border);border-radius:var(--radius);padding:var(--card-padding);background:var(--card)">
+    <a href={`${import.meta.env.BASE_URL}nepse-index`} style="display:block;border:1px solid var(--border);border-radius:var(--radius);padding:var(--card-padding);background:var(--card);text-decoration:none;color:inherit">
       <div style="color:var(--muted-foreground);font-size:12px">NEPSE Index</div>
       <div class="num" style="font-size:24px;text-align:left">{formatNumber(index.latestClose)}</div>
       <div class:list={['num', changeClass(index.changePct)]} style="text-align:left">{formatChange(index.changePct)}</div>
       <div style="color:var(--muted-foreground);font-size:12px">As of {index.latestDate}</div>
-    </div>
+    </a>
     <div style="border:1px solid var(--border);border-radius:var(--radius);padding:var(--card-padding);background:var(--card)">
       <div style="color:var(--muted-foreground);font-size:12px">Gold 24K (per tola)</div>
       <div class="num" style="font-size:24px;text-align:left">{formatNumber(gold24.latestClose)}</div>
@@ -68,6 +117,34 @@ function moverHref(symbol: string): string {
       <div style="color:var(--muted-foreground);font-size:12px">As of {silver.latestDate}</div>
     </div>
   </div>
+
+  <h2 style="margin-bottom:var(--space-sm)">Market breadth</h2>
+  <p style="color:var(--muted-foreground);font-size:12px;margin-top:0">
+    Latest session across the {formatNumber(marketWideEntries.length, 0)} market-wide symbols
+    (ordinary shares, currently listed).
+  </p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:var(--grid-gap);margin:0 0 var(--space-2xl)">
+    <div style="border:1px solid var(--border);border-radius:var(--radius);padding:var(--card-padding);background:var(--card)">
+      <div style="color:var(--muted-foreground);font-size:12px">Advancing</div>
+      <div class="num up" style="font-size:24px;text-align:left">Up {formatNumber(advancingCount, 0)}</div>
+      <div style="color:var(--muted-foreground);font-size:12px">of {formatNumber(comparableEntries.length, 0)} comparable</div>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:var(--radius);padding:var(--card-padding);background:var(--card)">
+      <div style="color:var(--muted-foreground);font-size:12px">Declining</div>
+      <div class="num down" style="font-size:24px;text-align:left">Down {formatNumber(decliningCount, 0)}</div>
+      <div style="color:var(--muted-foreground);font-size:12px">of {formatNumber(comparableEntries.length, 0)} comparable</div>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:var(--radius);padding:var(--card-padding);background:var(--card)">
+      <div style="color:var(--muted-foreground);font-size:12px">Unchanged</div>
+      <div class="num" style="font-size:24px;text-align:left">Flat {formatNumber(unchangedCount, 0)}</div>
+      <div style="color:var(--muted-foreground);font-size:12px">of {formatNumber(comparableEntries.length, 0)} comparable</div>
+    </div>
+  </div>
+  {notComparableCount > 0 && (
+    <p style="color:var(--muted-foreground);font-size:12px;margin:calc(-1 * var(--space-2xl) + var(--space-sm)) 0 var(--space-2xl)">
+      {formatNumber(notComparableCount, 0)} market-wide symbol(s) not comparable (no prior session to compare against), excluded above.
+    </p>
+  )}
 
   <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:var(--space-2xl);margin-bottom:var(--space-2xl)">
     <div>
@@ -120,10 +197,19 @@ function moverHref(symbol: string): string {
     </div>
   </div>
 
-  <h2>All symbols</h2>
+  <h2 style="margin-bottom:var(--space-sm)">Browse the data</h2>
   <p style="color:var(--muted-foreground);font-size:12px;margin-top:0">
-    Every stock, fund and metal in the dataset. Market-wide symbols are shown by default; use the
-    toggle to see debentures, promoter shares, mutual funds and metals too.
+    The full symbol directory lives in each section, with search, sort and the full history.
   </p>
-  <SymbolTable />
+  <div class="section-card-grid">
+    {sections.map(section => (
+      <a href={`${import.meta.env.BASE_URL}${section.href}`} class="section-card">
+        <div class="section-card-title">{section.label}</div>
+        <div class="section-card-meta">
+          {formatNumber(section.count, 0)} symbols &middot; {section.firstDate} to {section.latestDate}
+        </div>
+        <p class="section-card-desc">{section.description}</p>
+      </a>
+    ))}
+  </div>
 </Base>
