@@ -17,6 +17,10 @@
 - **No em dashes** anywhere in code, comments, copy or commit messages.
 - **No `Co-Authored-By` trailer** in any commit.
 - **Root `tsconfig.json` is strict**, including `noUncheckedIndexedAccess`, `noUnusedLocals` and `noUnusedParameters`. Indexing an array yields `T | undefined` and must be narrowed. It covers `scripts/**/*.ts`, so `scripts/site/*.ts` is typechecked by `pnpm typecheck` with no config change.
+- **Imports carry no file extension.** `tsconfig.json` does not set `allowImportingTsExtensions`, so
+  `from '../lib/csv-store.ts'` fails `pnpm typecheck` with TS5097. Write `from '../lib/csv-store'`,
+  matching every existing script. The exceptions are a runtime `tsx -e` one-liner and an Astro inline
+  `<script>` import, both of which are resolved by tsx and Vite rather than tsc.
 - **Reuse `scripts/lib/csv-store.ts`; do not write a second CSV parser.** `readRows(filePath): Array<Record<string, string>>` is quote-aware and already survives a comma inside `"9% Shangrila Development Bank Debenture, 2087"`.
 - **The market-wide filter is `instrument_type === 'ordinary' && status === 'listed'`, giving 284 of 432 symbols. Never filter on "has a sector".** 10 of the 284 have a blank `sector`, including Nepal Doorsanchar (NTC), Nepal Reinsurance and Himalayan Reinsurance. 274 is the sector-having subset and is the wrong number.
 - **Design tokens come from `design-system/nepal-market-data/MASTER.md` verbatim.** No raw hex in components.
@@ -113,7 +117,7 @@ import { tmpdir } from 'node:os';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { loadSymbolRefs, loadFundRefs, isMarketWide } from '../load-symbols.ts';
+import { loadSymbolRefs, loadFundRefs, isMarketWide } from '../load-symbols';
 
 function fixture(): string {
   const dir = mkdtempSync(join(tmpdir(), 'nmd-ref-'));
@@ -242,8 +246,8 @@ Create `scripts/site/load-symbols.ts`:
 ```ts
 import { join } from 'node:path';
 
-import { readRows } from '../lib/csv-store.ts';
-import type { FundRef, SymbolRef } from './manifest-types.ts';
+import { readRows } from '../lib/csv-store';
+import type { FundRef, SymbolRef } from './manifest-types';
 
 /**
  * The two reference tables in `data/reference/`, read into typed records.
@@ -332,7 +336,7 @@ import { tmpdir } from 'node:os';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { buildManifest } from '../build-manifest.ts';
+import { buildManifest } from '../build-manifest';
 
 const PRICE_HEADER =
   'published_date,open,high,low,close,per_change,traded_quantity,traded_amount,status';
@@ -437,9 +441,9 @@ Create `scripts/site/build-manifest.ts`:
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { readRows } from '../lib/csv-store.ts';
-import { loadFundRefs, loadSymbolRefs } from './load-symbols.ts';
-import type { Kind, Manifest, ManifestEntry } from './manifest-types.ts';
+import { readRows } from '../lib/csv-store';
+import { loadFundRefs, loadSymbolRefs } from './load-symbols';
+import type { Kind, Manifest, ManifestEntry } from './manifest-types';
 
 /** The index lives in `data/nepse/` alongside the scrips but is not one of them. */
 const INDEX_SYMBOL = 'NEPSE_INDEX';
@@ -858,7 +862,7 @@ Fonts: load Geist and Geist Mono from Google Fonts in `Base.astro` with a real f
 Create `site/src/lib/manifest.ts`:
 
 ```ts
-import type { Kind, Manifest, ManifestEntry } from '../../../scripts/site/manifest-types.ts';
+import type { Kind, Manifest, ManifestEntry } from '../../../scripts/site/manifest-types';
 import raw from '../data/manifest.json';
 
 export const manifest = raw as Manifest;
@@ -884,7 +888,7 @@ export function findEntry(symbol: string): ManifestEntry | undefined {
 Create `site/src/lib/format.ts`:
 
 ```ts
-import type { ManifestEntry } from '../../../scripts/site/manifest-types.ts';
+import type { ManifestEntry } from '../../../scripts/site/manifest-types';
 
 export function formatNumber(value: number, dp = 2): string {
   return value.toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp });
@@ -1277,12 +1281,12 @@ Create `site/src/pages/stocks/[symbol].astro`:
 
 ```astro
 ---
-import { readRows } from '../../../../scripts/lib/csv-store.ts';
+import { readRows } from '../../../../scripts/lib/csv-store';
 import Base from '../../layouts/Base.astro';
 import ChartMount from '../../components/ChartMount.astro';
 import OhlcTable from '../../components/OhlcTable.astro';
-import { byKind } from '../../lib/manifest.ts';
-import { changeClass, csvPath, formatChange, formatNumber } from '../../lib/format.ts';
+import { byKind } from '../../lib/manifest';
+import { changeClass, csvPath, formatChange, formatNumber } from '../../lib/format';
 
 export function getStaticPaths() {
   // Every symbol gets a page, debentures and promoter shares included (reviewed 2026-08-24). The
