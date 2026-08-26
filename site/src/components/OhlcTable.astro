@@ -1,0 +1,65 @@
+---
+/**
+ * The OHLC accessibility fallback for a symbol's chart: prerendered at build time from the same CSV
+ * the chart fetches client-side, so it is present with JavaScript disabled and when the chart's
+ * fetch fails. Never fetches on its own.
+ *
+ * `rows` come from `readRows` on `data/nepse/<SYMBOL>.csv`. That file's own `status` column is
+ * literally always "A" and carries no information, so it is never read here, let alone rendered.
+ */
+import { changeClass, formatChange, formatNumber } from '../lib/format';
+
+interface Props {
+  rows: Array<Record<string, string>>;
+  hasVolume: boolean;
+}
+
+const { rows, hasVolume } = Astro.props;
+
+// The CSV is stored oldest-first; the table shows newest-first, capped at the most recent 60 sessions.
+const recent = [...rows].reverse().slice(0, 60);
+
+function toNumber(value: string | undefined): number | null {
+  if (value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** A missing or unparsable OHLC value renders as a plain dash, never "NaN". */
+function fmtOrDash(value: string | undefined, dp = 2): string {
+  const n = toNumber(value);
+  return n === null ? '-' : formatNumber(n, dp);
+}
+---
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th class="num">Open</th>
+        <th class="num">High</th>
+        <th class="num">Low</th>
+        <th class="num">Close</th>
+        <th class="num">Change</th>
+        {hasVolume && <th class="num">Volume</th>}
+      </tr>
+    </thead>
+    <tbody>
+      {recent.map(row => {
+        const pct = toNumber(row.per_change);
+        return (
+          <tr>
+            <td>{row.published_date}</td>
+            <td class="num">{fmtOrDash(row.open)}</td>
+            <td class="num">{fmtOrDash(row.high)}</td>
+            <td class="num">{fmtOrDash(row.low)}</td>
+            <td class="num">{fmtOrDash(row.close)}</td>
+            <td class:list={['num', changeClass(pct)]}>{formatChange(pct)}</td>
+            {hasVolume && <td class="num">{fmtOrDash(row.traded_quantity, 0)}</td>}
+          </tr>
+        );
+      })}
+    </tbody>
+  </table>
+</div>

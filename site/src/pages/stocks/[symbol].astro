@@ -1,0 +1,53 @@
+---
+import { readRows } from '../../../../scripts/lib/csv-store';
+import Base from '../../layouts/Base.astro';
+import ChartMount from '../../components/ChartMount.astro';
+import OhlcTable from '../../components/OhlcTable.astro';
+import { byKind } from '../../lib/manifest';
+import { changeClass, csvPath, formatChange, formatNumber } from '../../lib/format';
+
+export function getStaticPaths() {
+  // Every symbol gets a page, debentures and promoter shares included (reviewed 2026-08-24). The
+  // market-wide filter governs aggregates, not who gets a page. The index is excluded: it is the
+  // landing chart, not a scrip.
+  return byKind('stock').map(entry => ({ params: { symbol: entry.symbol }, props: { entry } }));
+}
+
+const { entry } = Astro.props;
+// Read from data/, not from the public/ copy, so a page is never built against a stale sync.
+const rows = readRows(`data/nepse/${entry.symbol}.csv`);
+// entry.status comes from the reference table (listed/merged), never the price CSV's status column
+// (always "A", carries no information). Conflating the two would banner every live company.
+const merged = entry.status === 'merged';
+---
+
+<Base
+  title={`${entry.symbol} ${entry.name} price history | Nepal Market Data`}
+  description={`Daily open, high, low, close and volume for ${entry.name} (${entry.symbol}) on NEPSE, ${entry.firstDate} to ${entry.latestDate}. Free CSV download.`}
+>
+  <h1 style="margin:0">{entry.symbol}</h1>
+  <p style="margin:var(--space-sm) 0 var(--space-xl);color:var(--muted-foreground)">
+    {entry.name}{entry.sector ? ` · ${entry.sector}` : ''} · {entry.instrumentType.replace(/_/g, ' ')}
+  </p>
+
+  {merged && (
+    <p role="note" style="border:1px solid var(--border);border-left:3px solid var(--destructive);border-radius:var(--radius);padding:var(--space-lg);background:var(--muted)">
+      This company no longer trades on NEPSE. Its last recorded session was {entry.latestDate}. It is
+      excluded from market-wide views, and the history below is kept for reference.
+    </p>
+  )}
+
+  <div style="display:flex;gap:var(--space-2xl);flex-wrap:wrap;margin:var(--space-xl) 0">
+    <div><div style="color:var(--muted-foreground);font-size:12px">Last close</div><div class="num" style="font-size:24px">{formatNumber(entry.latestClose)}</div></div>
+    <div><div style="color:var(--muted-foreground);font-size:12px">Change</div><div class:list={['num', changeClass(entry.changePct)]} style="font-size:24px">{formatChange(entry.changePct)}</div></div>
+    <div><div style="color:var(--muted-foreground);font-size:12px">As of</div><div class="num" style="font-size:24px">{entry.latestDate}</div></div>
+    <div><div style="color:var(--muted-foreground);font-size:12px">Sessions</div><div class="num" style="font-size:24px">{formatNumber(entry.rows, 0)}</div></div>
+  </div>
+
+  <ChartMount csvUrl={csvPath(entry)} kind="ohlc" valueColumn="close" hasVolume={entry.hasVolume} label={`${entry.symbol} ${entry.name}`} />
+
+  <h2>Recent sessions</h2>
+  <OhlcTable rows={rows} hasVolume={entry.hasVolume} />
+
+  <p><a href={csvPath(entry)} download>Download the full {entry.symbol} history as CSV</a> ({formatNumber(entry.rows, 0)} rows from {entry.firstDate}).</p>
+</Base>
