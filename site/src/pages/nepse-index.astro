@@ -1,0 +1,66 @@
+---
+import { join } from 'node:path';
+import { readRows } from '../../../scripts/lib/csv-store';
+import Base from '../layouts/Base.astro';
+import ChartMount from '../components/ChartMount.astro';
+import OhlcTable from '../components/OhlcTable.astro';
+import { byKind, findEntry } from '../lib/manifest';
+import { changeClass, csvPath, formatChange, formatNumber } from '../lib/format';
+import { DATA_DIR } from '../lib/dataDir';
+
+const entry = findEntry('NEPSE_INDEX');
+if (!entry) {
+  throw new Error('NEPSE_INDEX entry missing from the manifest');
+}
+
+// The deepest-series claim is derived from the manifest, not hardcoded, so it stays true as the
+// dataset grows: the deepest scrip is whichever stock has the most rows.
+const deepestScripRows = byKind('stock').reduce((max, e) => Math.max(max, e.rows), 0);
+
+// Read from data/, not the public/ copy, through DATA_DIR (an absolute path), the same fix the
+// stock, fund and metal pages use: a bare relative 'data/...' path resolves against `site/` (the
+// cwd `pnpm --dir site build` uses) and readRows silently returns [], shipping an empty table.
+const rows = readRows(join(DATA_DIR, `nepse/${entry.symbol}.csv`));
+const shown = Math.min(rows.length, 60);
+
+// The index carries no volume in any of its rows; this is asserted, not just assumed, so a future
+// manifest change that flips it would fail loudly here instead of silently rendering an empty
+// Volume column.
+if (entry.hasVolume) {
+  throw new Error('NEPSE_INDEX manifest entry unexpectedly has hasVolume=true; the index has no volume data');
+}
+---
+
+<Base
+  title="NEPSE Index history | Nepal Market Data"
+  description={`Daily open, high, low and close for the NEPSE index, ${entry.firstDate} to ${entry.latestDate}. Free CSV download.`}
+>
+  <h1 style="margin:0">NEPSE Index</h1>
+  <p style="margin:var(--space-sm) 0 var(--space-xl);color:var(--muted-foreground)">
+    The benchmark index of the Nepal Stock Exchange, a capitalisation-weighted measure of every
+    listed ordinary share, published at the end of each trading session.
+  </p>
+
+  <p style="border:1px solid var(--border);border-radius:var(--radius);padding:var(--space-lg);background:var(--muted);color:var(--muted-foreground);font-size:12px">
+    History begins {entry.firstDate}, {formatNumber(entry.rows, 0)} sessions in total. This is the
+    deepest series in the dataset: the longest-running stock covers {formatNumber(deepestScripRows, 0)} sessions,
+    less than half as many.
+  </p>
+
+  <div style="display:flex;gap:var(--space-2xl);flex-wrap:wrap;margin:var(--space-xl) 0">
+    <div><div style="color:var(--muted-foreground);font-size:12px">Last level</div><div class="num" style="font-size:24px">{formatNumber(entry.latestClose)}</div></div>
+    <div><div style="color:var(--muted-foreground);font-size:12px">Change</div><div class:list={['num', changeClass(entry.changePct)]} style="font-size:24px">{formatChange(entry.changePct)}</div></div>
+    <div><div style="color:var(--muted-foreground);font-size:12px">As of</div><div class="num" style="font-size:24px">{entry.latestDate}</div></div>
+    <div><div style="color:var(--muted-foreground);font-size:12px">Sessions</div><div class="num" style="font-size:24px">{formatNumber(entry.rows, 0)}</div></div>
+  </div>
+
+  <ChartMount csvUrl={csvPath(entry)} kind="ohlc" valueColumn="close" hasVolume={entry.hasVolume} label="NEPSE Index" />
+
+  <h2>Recent sessions</h2>
+  <p style="color:var(--muted-foreground);font-size:12px;margin-top:0">
+    Most recent {formatNumber(shown, 0)} of {formatNumber(entry.rows, 0)} sessions. Columns are sortable.
+  </p>
+  <OhlcTable rows={rows} hasVolume={entry.hasVolume} />
+
+  <p><a href={csvPath(entry)} download>Download the full NEPSE Index history as CSV</a> ({formatNumber(entry.rows, 0)} rows from {entry.firstDate}).</p>
+</Base>

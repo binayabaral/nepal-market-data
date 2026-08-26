@@ -1,0 +1,21 @@
+---
+import Base from '../../layouts/Base.astro';
+import SymbolTable from '../../components/SymbolTable.astro';
+import { byKind } from '../../lib/manifest';
+import { formatNumber } from '../../lib/format';
+
+const count = byKind('metal').length;
+---
+
+<Base
+  title="Precious metals | Nepal Market Data"
+  description={`Every precious metal price series in the dataset (${count} metals), as published by FENEGOSIDA.`}
+>
+  <h1 style="margin:0">Precious metals</h1>
+  <p style="margin:var(--space-sm) 0 var(--space-2xl);color:var(--muted-foreground)">
+    All {formatNumber(count, 0)} precious metal price series tracked in the dataset, as published by
+    FENEGOSIDA.
+  </p>
+
+  <SymbolTable kinds={['metal']} showToggle={false} />
+</Base>

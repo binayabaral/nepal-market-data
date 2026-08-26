@@ -1,0 +1,67 @@
+name: Deploy Site
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  # Deliberately NOT the shared `commit-data` group. That group exists to serialise the workflows
+  # that push commits to this branch; this one only reads. Joining it would make every deploy queue
+  # behind the scrapers for no reason. cancel-in-progress is correct here because deploys are
+  # idempotent and only the newest matters, the opposite of the scrapers' cancel-in-progress: false.
+  group: deploy-site
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.14.0
+          run_install: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      # site/ is a pnpm workspace member (see pnpm-workspace.yaml), sharing the one root lockfile,
+      # so a single install covers both the root scripts and the site package.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build the site
+        run: pnpm site:build
+
+      # Runs before the artifact upload, so a broken build fails this step instead of deploying.
+      - name: Smoke test the build
+        run: pnpm site:smoke
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

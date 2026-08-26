@@ -1,0 +1,22 @@
+---
+import Base from '../../layouts/Base.astro';
+import SymbolTable from '../../components/SymbolTable.astro';
+import { byKind } from '../../lib/manifest';
+import { formatNumber } from '../../lib/format';
+
+const count = byKind('stock').length;
+---
+
+<Base
+  title="Stocks | Nepal Market Data"
+  description={`Every NEPSE-listed stock in the dataset (${count} symbols), including ordinary shares, debentures, promoter shares, closed-end funds and merged shells.`}
+>
+  <h1 style="margin:0">Stocks</h1>
+  <p style="margin:var(--space-sm) 0 var(--space-2xl);color:var(--muted-foreground)">
+    All {formatNumber(count, 0)} NEPSE-listed scrips in the dataset. Ordinary, currently listed
+    shares are shown by default; use the toggle below to also see debentures, promoter shares,
+    closed-end funds and merged shells.
+  </p>
+
+  <SymbolTable kinds={['stock']} />
+</Base>

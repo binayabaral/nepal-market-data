@@ -9,8 +9,12 @@
     "node": ">=22"
   },
   "scripts": {
+    "test": "node --import tsx --test \"scripts/**/__tests__/*.test.ts\"",
     "typecheck": "tsc --noEmit",
-    "freshness": "tsx scripts/ci/check-freshness.ts"
+    "freshness": "tsx scripts/ci/check-freshness.ts",
+    "site:dev": "pnpm tsx scripts/site/build-manifest.ts && pnpm tsx scripts/site/sync-data.ts && pnpm --dir site dev",
+    "site:build": "pnpm tsx scripts/site/build-manifest.ts && pnpm tsx scripts/site/sync-data.ts && pnpm --dir site build",
+    "site:smoke": "pnpm tsx scripts/site/smoke-test.ts"
   },
   "dependencies": {
     "tsx": "^4.19.2",

@@ -1,0 +1,148 @@
+---
+/**
+ * The OHLC accessibility fallback for a symbol's chart: prerendered at build time from the same CSV
+ * the chart fetches client-side, so it is present with JavaScript disabled and when the chart's
+ * fetch fails. Never fetches on its own.
+ *
+ * `rows` come from `readRows` on `data/nepse/<SYMBOL>.csv`. That file's own `status` column is
+ * literally always "A" and carries no information, so it is never read here, let alone rendered.
+ *
+ * Sortable columns (design-system/nepal-market-data/MASTER.md requires this for the OHLC fallback,
+ * "ship it in v1"). Sorting is a small inline vanilla script, not a framework island, so "the chart
+ * is the only client component" still holds. With JavaScript off the table renders in its normal
+ * newest-first order and stays fully readable; nothing about the base markup depends on the script.
+ */
+import { changeClass, formatChange, formatNumber } from '../lib/format';
+
+interface Props {
+  rows: Array<Record<string, string>>;
+  hasVolume: boolean;
+}
+
+const { rows, hasVolume } = Astro.props;
+
+// The CSV is stored oldest-first; the table shows newest-first, capped at the most recent 60 sessions.
+const recent = [...rows].reverse().slice(0, 60);
+
+function toNumber(value: string | undefined): number | null {
+  if (value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** A missing or unparsable OHLC value renders as a plain dash, never "NaN". */
+function fmtOrDash(value: string | undefined, dp = 2): string {
+  const n = toNumber(value);
+  return n === null ? '-' : formatNumber(n, dp);
+}
+
+/** Raw sort key for a numeric cell: the empty string for a dash, so it always sorts to the bottom. */
+function sortValue(n: number | null): string {
+  return n === null ? '' : String(n);
+}
+---
+
+<div class="table-wrap">
+  <table data-sortable>
+    <thead>
+      <tr>
+        <th scope="col" data-sort-key="date" data-sort-type="string" aria-sort="none" tabindex="0" role="button">Date</th>
+        <th scope="col" class="num" data-sort-key="open" data-sort-type="number" aria-sort="none" tabindex="0" role="button">Open</th>
+        <th scope="col" class="num" data-sort-key="high" data-sort-type="number" aria-sort="none" tabindex="0" role="button">High</th>
+        <th scope="col" class="num" data-sort-key="low" data-sort-type="number" aria-sort="none" tabindex="0" role="button">Low</th>
+        <th scope="col" class="num" data-sort-key="close" data-sort-type="number" aria-sort="none" tabindex="0" role="button">Close</th>
+        <th scope="col" class="num" data-sort-key="change" data-sort-type="number" aria-sort="none" tabindex="0" role="button">Change</th>
+        {hasVolume && (
+          <th scope="col" class="num" data-sort-key="volume" data-sort-type="number" aria-sort="none" tabindex="0" role="button">Volume</th>
+        )}
+      </tr>
+    </thead>
+    <tbody>
+      {recent.map(row => {
+        const open = toNumber(row.open);
+        const high = toNumber(row.high);
+        const low = toNumber(row.low);
+        const close = toNumber(row.close);
+        const pct = toNumber(row.per_change);
+        const volume = toNumber(row.traded_quantity);
+        return (
+          <tr>
+            <td data-sort-value={row.published_date ?? ''}>{row.published_date}</td>
+            <td class="num" data-sort-value={sortValue(open)}>{fmtOrDash(row.open)}</td>
+            <td class="num" data-sort-value={sortValue(high)}>{fmtOrDash(row.high)}</td>
+            <td class="num" data-sort-value={sortValue(low)}>{fmtOrDash(row.low)}</td>
+            <td class="num" data-sort-value={sortValue(close)}>{fmtOrDash(row.close)}</td>
+            <td class:list={['num', changeClass(pct)]} data-sort-value={sortValue(pct)}>{formatChange(pct)}</td>
+            {hasVolume && (
+              <td class="num" data-sort-value={sortValue(volume)}>{fmtOrDash(row.traded_quantity, 0)}</td>
+            )}
+          </tr>
+        );
+      })}
+    </tbody>
+  </table>
+</div>
+
+<style>
+  th[data-sort-key] {
+    cursor: pointer;
+    user-select: none;
+  }
+  th[data-sort-key]:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+  }
+  /* Direction is never carried by the arrow glyph alone: aria-sort on the th is the source of truth
+     for assistive tech, this is a sighted-user affordance on top of it. */
+  th[aria-sort='ascending']::after {
+    content: ' \25B2';
+  }
+  th[aria-sort='descending']::after {
+    content: ' \25BC';
+  }
+</style>
+
+<script>
+  function initSortableTable(table: HTMLTableElement): void {
+    const headers = Array.from(table.querySelectorAll<HTMLTableCellElement>('thead th[data-sort-key]'));
+    const tbody = table.querySelector('tbody');
+    if (!tbody || headers.length === 0) return;
+
+    function sortBy(columnIndex: number, type: string, direction: 'ascending' | 'descending'): void {
+      if (!tbody) return;
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      rows.sort((a, b) => {
+        const rawA = a.children[columnIndex]?.getAttribute('data-sort-value') ?? '';
+        const rawB = b.children[columnIndex]?.getAttribute('data-sort-value') ?? '';
+        // A dash (missing value) always sorts to the bottom, regardless of direction.
+        if (rawA === '' && rawB === '') return 0;
+        if (rawA === '') return 1;
+        if (rawB === '') return -1;
+        const cmp = type === 'number' ? Number(rawA) - Number(rawB) : rawA < rawB ? -1 : rawA > rawB ? 1 : 0;
+        return direction === 'ascending' ? cmp : -cmp;
+      });
+      for (const row of rows) tbody.appendChild(row);
+    }
+
+    function activate(th: HTMLTableCellElement, columnIndex: number): void {
+      const next: 'ascending' | 'descending' = th.getAttribute('aria-sort') === 'ascending' ? 'descending' : 'ascending';
+      for (const h of headers) h.setAttribute('aria-sort', 'none');
+      th.setAttribute('aria-sort', next);
+      sortBy(columnIndex, th.dataset.sortType ?? 'string', next);
+    }
+
+    headers.forEach((th, columnIndex) => {
+      th.addEventListener('click', () => activate(th, columnIndex));
+      th.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          activate(th, columnIndex);
+        }
+      });
+    });
+  }
+
+  for (const table of document.querySelectorAll<HTMLTableElement>('table[data-sortable]')) {
+    initSortableTable(table);
+  }
+</script>

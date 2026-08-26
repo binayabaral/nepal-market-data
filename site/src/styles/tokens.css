@@ -1,0 +1,176 @@
+/*
+ * Taken verbatim from design-system/nepal-market-data/MASTER.md, which took them from expensesync's
+ * app/globals.css. Do not re-derive these values. No component may use a raw hex.
+ */
+:root {
+  --background: #ffffff;
+  --foreground: #09090b;
+  --card: #ffffff;
+  --primary: #16a34a;
+  --muted: #f4f4f5;
+  --muted-foreground: #71717a;
+  --border: #e4e4e7;
+  --destructive: #ef4444;
+  --radius: 0.5rem;
+
+  --space-xs: 2px;
+  --space-sm: 4px;
+  --space-md: 8px;
+  --space-lg: 12px;
+  --space-xl: 16px;
+  --space-2xl: 24px;
+  --space-3xl: 32px;
+
+  --content-max-width: 1440px;
+
+  --table-row-height: 36px;
+  --card-padding: 12px;
+  --grid-gap: 8px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+
+  --font-sans: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', 'Menlo', monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --background: #0c0a09;
+    --foreground: #f2f2f2;
+    --card: #1c1917;
+    --primary: #22c55e;
+    --muted: #262626;
+    --muted-foreground: #a1a1aa;
+    --border: #27272a;
+    --destructive: #f77373;
+  }
+}
+
+:root[data-theme='dark'] {
+  --background: #0c0a09;
+  --foreground: #f2f2f2;
+  --card: #1c1917;
+  --primary: #22c55e;
+  --muted: #262626;
+  --muted-foreground: #a1a1aa;
+  --border: #27272a;
+  --destructive: #f77373;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Direction is never carried by colour alone: every change value also has a + or - prefix. */
+.up { color: var(--primary); }
+.down { color: var(--destructive); }
+
+/*
+ * One shared container convention for the header's content, main, and the footer's content: the
+ * same max-width and horizontal padding in all three, so the brand, the nav's first item, the
+ * page h1 and the footer text share one left edge. The header/footer BACKGROUNDS and BORDERS stay
+ * full-width by living on the <header>/<footer> elements themselves; only this inner wrapper is
+ * constrained.
+ */
+.container {
+  max-width: var(--content-max-width);
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: var(--space-xl);
+  padding-right: var(--space-xl);
+}
+
+.table-wrap { overflow-x: auto; }
+
+/* Dashboard section-navigation cards (index.astro). Kept in this global stylesheet rather than a
+   scoped <style> block in the page so the page's markup doesn't pick up Astro's data-astro-cid-*
+   scoping attribute, which the smoke test's HTML pattern-matching does not expect. Navigation
+   chrome, not a data region: the green rule permits green accents here. */
+.section-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--grid-gap);
+  margin-bottom: var(--space-2xl);
+}
+
+.section-card {
+  display: block;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--card-padding);
+  background: var(--card);
+  color: var(--foreground);
+  text-decoration: none;
+  transition: border-color 150ms ease-out;
+}
+
+.section-card:hover,
+.section-card:focus-visible {
+  border-color: var(--primary);
+}
+
+.section-card-title {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--primary);
+}
+
+.section-card-meta {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--muted-foreground);
+  margin-top: var(--space-xs);
+}
+
+.section-card-desc {
+  font-size: 13px;
+  color: var(--muted-foreground);
+  margin: var(--space-sm) 0 0;
+}
+
+table { border-collapse: collapse; width: 100%; }
+th, td { padding: 0 var(--space-lg); height: var(--table-row-height); border-bottom: 1px solid var(--border); text-align: left; }
+thead th { position: sticky; top: 0; background: var(--card); z-index: 1; }
+tbody tr:hover { background: var(--muted); }
+
+a { color: var(--primary); }
+/* No green chrome inside a data region: inside data, green means "up" and nothing else. */
+td a, th a { color: var(--foreground); }
+
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
+/* Prose pages (about) use 16px body text and 1.5 line-height; data pages stay at the 14px default. */
+.prose {
+  font-size: 16px;
+  line-height: 1.5;
+  max-width: 72ch;
+}
+
+.prose h1 { font-size: 32px; }
+.prose h2 { font-size: 24px; margin-top: var(--space-3xl); }
+.prose p, .prose ul { margin: var(--space-xl) 0; }
+.prose code {
+  font-family: var(--font-mono);
+  background: var(--muted);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius);
+  font-size: 0.9em;
+}

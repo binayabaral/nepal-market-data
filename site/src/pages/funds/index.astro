@@ -1,0 +1,20 @@
+---
+import Base from '../../layouts/Base.astro';
+import SymbolTable from '../../components/SymbolTable.astro';
+import { byKind } from '../../lib/manifest';
+import { formatNumber } from '../../lib/format';
+
+const count = byKind('fund').length;
+---
+
+<Base
+  title="Mutual funds | Nepal Market Data"
+  description={`Every SIP mutual fund NAV series in the dataset (${count} funds), all shown, nothing hidden.`}
+>
+  <h1 style="margin:0">Mutual funds</h1>
+  <p style="margin:var(--space-sm) 0 var(--space-2xl);color:var(--muted-foreground)">
+    All {formatNumber(count, 0)} SIP mutual funds tracked in the dataset, every one first-class.
+  </p>
+
+  <SymbolTable kinds={['fund']} showToggle={false} />
+</Base>

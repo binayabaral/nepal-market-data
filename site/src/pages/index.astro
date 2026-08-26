@@ -1,0 +1,215 @@
+---
+import Base from '../layouts/Base.astro';
+import ChartMount from '../components/ChartMount.astro';
+import { byKind, entries, findEntry, marketWide } from '../lib/manifest';
+import { changeClass, csvPath, formatChange, formatNumber } from '../lib/format';
+import type { Kind } from '../../../scripts/site/manifest-types';
+
+const index = findEntry('NEPSE_INDEX');
+const gold24 = findEntry('gold-24k');
+const gold22 = findEntry('gold-22k');
+const silver = findEntry('silver');
+if (!index || !gold24 || !gold22 || !silver) {
+  throw new Error('Landing page KPI entries missing from the manifest');
+}
+
+// Movers are computed from marketWide() only: instrumentType === 'ordinary' && status === 'listed',
+// never from "has a sector". A debenture, promoter share, closed-end fund or merged shell showing up
+// here means the filter was skipped.
+const withChange = marketWide().filter(entry => entry.changePct !== null);
+const gainers = [...withChange].sort((a, b) => (b.changePct as number) - (a.changePct as number)).slice(0, 5);
+const losers = [...withChange].sort((a, b) => (a.changePct as number) - (b.changePct as number)).slice(0, 5);
+
+// Row count and date span read from the manifest, never hardcoded, since both grow daily.
+const totalRows = entries.reduce((sum, entry) => sum + entry.rows, 0);
+const firstDate = entries.reduce((min, entry) => (entry.firstDate < min ? entry.firstDate : min), entries[0].firstDate);
+const latestDate = entries.reduce((max, entry) => (entry.latestDate > max ? entry.latestDate : max), entries[0].latestDate);
+
+function moverHref(symbol: string): string {
+  return `${import.meta.env.BASE_URL}stocks/${symbol}`;
+}
+
+// Market breadth: advancing / declining / unchanged, counted out of the market-wide total (ordinary,
+// currently listed symbols). Entries with a null changePct (no prior session to compare against) are
+// excluded from the three counts and reported separately, never silently dropped.
+const marketWideEntries = marketWide();
+const comparableEntries = marketWideEntries.filter(entry => entry.changePct !== null);
+const advancingCount = comparableEntries.filter(entry => (entry.changePct as number) > 0).length;
+const decliningCount = comparableEntries.filter(entry => (entry.changePct as number) < 0).length;
+const unchangedCount = comparableEntries.filter(entry => (entry.changePct as number) === 0).length;
+const notComparableCount = marketWideEntries.length - comparableEntries.length;
+
+// Section cards: count and date span derived per kind from the manifest at build time, never
+// hardcoded, so a scraper adding a new symbol updates these on the next build.
+const sectionDefs: Array<{ kind: Kind; label: string; href: string; description: string }> = [
+  {
+    kind: 'stock',
+    label: 'Stocks',
+    href: 'stocks',
+    description: 'Every NEPSE-listed scrip: ordinary shares, debentures, promoter shares, closed-end funds and merged shells.'
+  },
+  {
+    kind: 'fund',
+    label: 'Funds',
+    href: 'funds',
+    description: 'SIP mutual fund NAV history across every listed asset management company.'
+  },
+  {
+    kind: 'metal',
+    label: 'Metals',
+    href: 'metals',
+    description: 'Daily gold and silver rates, per tola, as published by source.'
+  }
+];
+
+const sections = sectionDefs.map(section => {
+  const kindEntries = byKind(section.kind);
+  const sectionFirstDate = kindEntries.reduce(
+    (min, entry) => (entry.firstDate < min ? entry.firstDate : min),
+    kindEntries[0]?.firstDate ?? ''
+  );
+  const sectionLatestDate = kindEntries.reduce(
+    (max, entry) => (entry.latestDate > max ? entry.latestDate : max),
+    kindEntries[0]?.latestDate ?? ''
+  );
+  return { ...section, count: kindEntries.length, firstDate: sectionFirstDate, latestDate: sectionLatestDate };
+});
+---
+
+<Base
+  title="Nepal Market Data | NEPSE, gold, silver and mutual fund history"
+  description="A free, daily-updated, open dataset of NEPSE stock prices, gold and silver rates, and SIP mutual fund NAVs, as plain CSV."
+>
+  <h1 style="margin:0">Nepal Market Data</h1>
+  <p style="margin:var(--space-sm) 0 var(--space-2xl);color:var(--muted-foreground)">
+    A free, daily-updated, open dataset covering {formatNumber(totalRows, 0)} rows of NEPSE stock
+    prices, precious metal rates and SIP mutual fund NAVs, from {firstDate} to {latestDate}.
+  </p>
+
+  <ChartMount csvUrl={csvPath(index)} kind="ohlc" valueColumn="close" hasVolume={false} label="NEPSE Index" />
+  <p style="margin:var(--space-sm) 0 var(--space-2xl);font-size:12px">
+    <a href={`${import.meta.env.BASE_URL}nepse-index`}>View the full NEPSE Index history and CSV download &rarr;</a>
+  </p>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:var(--grid-gap);margin:var(--space-2xl) 0">
+    <a href={`${import.meta.env.BASE_URL}nepse-index`} style="display:block;border:1px solid var(--border);border-radius:var(--radius);padding:var(--card-padding);background:var(--card);text-decoration:none;color:inherit">
+      <div style="color:var(--muted-foreground);font-size:12px">NEPSE Index</div>
+      <div class="num" style="font-size:24px;text-align:left">{formatNumber(index.latestClose)}</div>
+      <div class:list={['num', changeClass(index.changePct)]} style="text-align:left">{formatChange(index.changePct)}</div>
+      <div style="color:var(--muted-foreground);font-size:12px">As of {index.latestDate}</div>
+    </a>
+    <div style="border:1px solid var(--border);border-radius:var(--radius);padding:var(--card-padding);background:var(--card)">
+      <div style="color:var(--muted-foreground);font-size:12px">Gold 24K (per tola)</div>
+      <div class="num" style="font-size:24px;text-align:left">{formatNumber(gold24.latestClose)}</div>
+      <div class:list={['num', changeClass(gold24.changePct)]} style="text-align:left">{formatChange(gold24.changePct)}</div>
+      <div style="color:var(--muted-foreground);font-size:12px">As of {gold24.latestDate}</div>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:var(--radius);padding:var(--card-padding);background:var(--card)">
+      <div style="color:var(--muted-foreground);font-size:12px">Gold 22K (per tola)</div>
+      <div class="num" style="font-size:24px;text-align:left">{formatNumber(gold22.latestClose)}</div>
+      <div class:list={['num', changeClass(gold22.changePct)]} style="text-align:left">{formatChange(gold22.changePct)}</div>
+      <div style="color:var(--muted-foreground);font-size:12px">As of {gold22.latestDate}</div>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:var(--radius);padding:var(--card-padding);background:var(--card)">
+      <div style="color:var(--muted-foreground);font-size:12px">Silver (per tola)</div>
+      <div class="num" style="font-size:24px;text-align:left">{formatNumber(silver.latestClose)}</div>
+      <div class:list={['num', changeClass(silver.changePct)]} style="text-align:left">{formatChange(silver.changePct)}</div>
+      <div style="color:var(--muted-foreground);font-size:12px">As of {silver.latestDate}</div>
+    </div>
+  </div>
+
+  <h2 style="margin-bottom:var(--space-sm)">Market breadth</h2>
+  <p style="color:var(--muted-foreground);font-size:12px;margin-top:0">
+    Latest session across the {formatNumber(marketWideEntries.length, 0)} market-wide symbols
+    (ordinary shares, currently listed).
+  </p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:var(--grid-gap);margin:0 0 var(--space-2xl)">
+    <div style="border:1px solid var(--border);border-radius:var(--radius);padding:var(--card-padding);background:var(--card)">
+      <div style="color:var(--muted-foreground);font-size:12px">Advancing</div>
+      <div class="num up" style="font-size:24px;text-align:left">Up {formatNumber(advancingCount, 0)}</div>
+      <div style="color:var(--muted-foreground);font-size:12px">of {formatNumber(comparableEntries.length, 0)} comparable</div>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:var(--radius);padding:var(--card-padding);background:var(--card)">
+      <div style="color:var(--muted-foreground);font-size:12px">Declining</div>
+      <div class="num down" style="font-size:24px;text-align:left">Down {formatNumber(decliningCount, 0)}</div>
+      <div style="color:var(--muted-foreground);font-size:12px">of {formatNumber(comparableEntries.length, 0)} comparable</div>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:var(--radius);padding:var(--card-padding);background:var(--card)">
+      <div style="color:var(--muted-foreground);font-size:12px">Unchanged</div>
+      <div class="num" style="font-size:24px;text-align:left">Flat {formatNumber(unchangedCount, 0)}</div>
+      <div style="color:var(--muted-foreground);font-size:12px">of {formatNumber(comparableEntries.length, 0)} comparable</div>
+    </div>
+  </div>
+  {notComparableCount > 0 && (
+    <p style="color:var(--muted-foreground);font-size:12px;margin:calc(-1 * var(--space-2xl) + var(--space-sm)) 0 var(--space-2xl)">
+      {formatNumber(notComparableCount, 0)} market-wide symbol(s) not comparable (no prior session to compare against), excluded above.
+    </p>
+  )}
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:var(--space-2xl);margin-bottom:var(--space-2xl)">
+    <div>
+      <h2 style="margin-bottom:var(--space-sm)">Top gainers</h2>
+      <p style="color:var(--muted-foreground);font-size:12px;margin-top:0">Market-wide symbols only: ordinary shares, currently listed.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Symbol</th>
+              <th scope="col" class="num">Last</th>
+              <th scope="col" class="num">Change</th>
+            </tr>
+          </thead>
+          <tbody>
+            {gainers.map(entry => (
+              <tr>
+                <td><a href={moverHref(entry.symbol)}>{entry.symbol}</a></td>
+                <td class="num">{formatNumber(entry.latestClose)}</td>
+                <td class:list={['num', changeClass(entry.changePct)]}>{formatChange(entry.changePct)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <h2 style="margin-bottom:var(--space-sm)">Top losers</h2>
+      <p style="color:var(--muted-foreground);font-size:12px;margin-top:0">Market-wide symbols only: ordinary shares, currently listed.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Symbol</th>
+              <th scope="col" class="num">Last</th>
+              <th scope="col" class="num">Change</th>
+            </tr>
+          </thead>
+          <tbody>
+            {losers.map(entry => (
+              <tr>
+                <td><a href={moverHref(entry.symbol)}>{entry.symbol}</a></td>
+                <td class="num">{formatNumber(entry.latestClose)}</td>
+                <td class:list={['num', changeClass(entry.changePct)]}>{formatChange(entry.changePct)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <h2 style="margin-bottom:var(--space-sm)">Browse the data</h2>
+  <p style="color:var(--muted-foreground);font-size:12px;margin-top:0">
+    The full symbol directory lives in each section, with search, sort and the full history.
+  </p>
+  <div class="section-card-grid">
+    {sections.map(section => (
+      <a href={`${import.meta.env.BASE_URL}${section.href}`} class="section-card">
+        <div class="section-card-title">{section.label}</div>
+        <div class="section-card-meta">
+          {formatNumber(section.count, 0)} symbols &middot; {section.firstDate} to {section.latestDate}
+        </div>
+        <p class="section-card-desc">{section.description}</p>
+      </a>
+    ))}
+  </div>
+</Base>
