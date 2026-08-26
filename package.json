@@ -9,6 +9,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "test": "node --import tsx --test \"scripts/**/__tests__/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "freshness": "tsx scripts/ci/check-freshness.ts"
   },
