@@ -11,3 +11,11 @@ node_modules
 # to pick up project context) but must never be published here.
 .claude/
 CLAUDE.md
+
+# Site build artifacts. The manifest and the data copy are generated from data/ on every build,
+# and committing 31MB of duplicated CSV into a repo whose whole point is the original would be absurd.
+site/node_modules
+site/dist
+site/.astro
+site/public/data
+site/src/data/manifest.json

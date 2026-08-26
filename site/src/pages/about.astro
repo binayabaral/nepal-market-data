@@ -1,0 +1,79 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base
+  title="About - Nepal Market Data"
+  description="What this dataset contains, how it is collected, and its known quirks."
+>
+  <article class="prose">
+    <h1>About this dataset</h1>
+
+    <p>
+      Nepal Market Data is a free, open, daily-updated historical dataset covering three kinds of
+      Nepali financial instruments: NEPSE-listed stocks (plus the NEPSE index itself), precious
+      metals (gold and silver rates), and SIP mutual fund net asset values. Every row is stored as
+      plain CSV, one file per symbol, and the raw files are the same ones this site reads at
+      runtime: nothing here is a derived or summarized copy.
+    </p>
+
+    <h2>What is in each dataset</h2>
+    <p>
+      The NEPSE stock and index files, under <code>data/nepse/</code>, carry a published date,
+      open, high, low, and close price, and traded volume where the source reports it (the index
+      itself has no volume). The precious metals files, under <code>data/precious-metals/</code>,
+      carry a published date and a price per unit. The mutual fund files, under
+      <code>data/sip-mutual-funds/</code>, carry a published date and a net asset value, or NAV.
+    </p>
+
+    <h2>Rows are source-dated, not run-dated</h2>
+    <p>
+      Every row's date is the date its source says the value applies to, not the date the scraper
+      happened to run. A scraper that runs late, or catches up after an outage, still writes the
+      row under the date the source published it for, not the date it was fetched.
+    </p>
+
+    <h2>NAV data is a day behind by design</h2>
+    <p>
+      Mutual fund NAVs are inherently at least one day behind the calendar. Every source in this
+      dataset posts day D's NAV on day D+1, after the fund's own end-of-day valuation is complete.
+      A missing NAV for today is expected, not an error: today's NAV will not exist anywhere yet,
+      including on the source's own site.
+    </p>
+
+    <h2>Weekday-only publishers</h2>
+    <p>
+      Two fund sources, <code>CSBY</code> and <code>SFF</code>, publish NAVs on weekdays only. Gaps
+      in their files over Saturdays and Sundays are expected and are not a scraper failure.
+    </p>
+
+    <h2>Gaps are real, nothing is fabricated</h2>
+    <p>
+      More generally, weekend and public holiday gaps across every dataset are real reflections of
+      days the underlying market or source did not publish a value. No row is ever fabricated,
+      interpolated, or carried forward to fill a gap. If a date is missing from a file, it is
+      because the source had nothing to report for that date.
+    </p>
+
+    <h2>Sector is the source's own vocabulary</h2>
+    <p>
+      The <code>sector</code> field on each stock reference is copied as published by the source,
+      not mapped onto a standard industry taxonomy. Values vary in specificity and naming from what
+      you might expect. One entry is a known misnomer: <code>government_bond</code> is the source's
+      label for a sector that in fact contains only bank bonds, not government bonds. It is kept
+      verbatim rather than silently corrected, so that anyone comparing this dataset against the
+      original source sees the same value in both places.
+    </p>
+
+    <h2>Licence</h2>
+    <p>
+      This dataset and site are released under the MIT licence. Use it, fork it, build on it.
+    </p>
+
+    <h2>Source</h2>
+    <p>
+      The raw CSVs, the scrapers that collect them, and this site's source are all in one public
+      repository: <a href="https://github.com/binayabaral/nepal-market-data">github.com/binayabaral/nepal-market-data</a>.
+    </p>
+  </article>
+</Base>
