@@ -260,6 +260,7 @@ NMBD87-88,8.5% NMB Rinpatra 2087/88,Corporate Debentures,debenture,,listed
 NMBD89-90,10.75% NMB Debenture  2089/2090,Corporate Debentures,debenture,,listed
 NMBHF2,NMB Hybrid Fund L-II,Mutual Fund,mutual_fund,,listed
 NMBMF,NMB Laghubitta Bittiya Sanstha Limited,Microfinance,ordinary,Microfinance,listed
+NMBPO,NMB Bank Limited Promoter Share,Promoter Share,promoter_share,,listed
 NMBUR93-94,4% NMB Urja Rinpatra (Energy Bond II) 2093/94,Corporate Debentures,debenture,,listed
 NMFBS,National Laghubitta Bittiya Sanstha Limited,Microfinance,ordinary,Microfinance,listed
 NMIC,Nepal Micro Insurance Company Limited,Non-Life Insurance,ordinary,Non-Life Insurance,listed
@@ -405,6 +406,7 @@ SPL,Shuvam Power Limited,Hydropower,ordinary,Hydropower,listed
 SRBL,Sunrise Bank Limited,Merged,ordinary,,merged
 SRBLD83,10.25% SRBL Debenture 2083,Corporate Debentures,debenture,,listed
 SRLI,Sanima Reliance Life Insurance Limited,Life Insurance,ordinary,Life Insurance,listed
+SRLIP,Sanima Reliance Life Insurance Limited Promoter Share,Promoter Share,promoter_share,,listed
 SSHL,Shiva Shree Hydropower Limited,Hydropower,ordinary,Hydropower,listed
 STC,Salt Trading Corporation Limited,Trading,ordinary,Trading,listed
 SWASTIK,Swastik Laghubitta Bittiya Sanstha Limited,Microfinance,ordinary,Microfinance,listed
