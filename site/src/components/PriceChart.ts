@@ -186,7 +186,14 @@ export function mountChart(root: HTMLElement): void {
       rows = parse(await res.text(), valueColumn);
       if (rows.length === 0) throw new Error('no rows');
       status.hidden = true;
+      // autoSize (not a hand-rolled ResizeObserver) is what sizes the chart to its container on the
+      // FIRST paint. A manually attached ResizeObserver only fires on later resizes, so without
+      // autoSize the chart initially renders at the library's intrinsic default width, wider than a
+      // narrow viewport, dragging the whole page into horizontal scroll on phones. height stays as a
+      // fallback for the rare case ResizeObserver itself is unavailable. Do not reinstate the manual
+      // observer: two observers both driving width would fight each other.
       chart = createChart(container, {
+        autoSize: true,
         height: 420,
         layout: { background: { color: 'transparent' }, textColor: token('--muted-foreground') },
         grid: { vertLines: { color: token('--border') }, horzLines: { color: token('--border') } },
@@ -204,7 +211,6 @@ export function mountChart(root: HTMLElement): void {
       if (RANGES.find(r => r.label === DEFAULT_RANGE)!.days > span) active = 'All';
 
       render();
-      new ResizeObserver(() => chart?.applyOptions({ width: container.clientWidth })).observe(container);
     } catch (error) {
       // The prerendered latest numbers and the OHLC table are already on the page, so a failed
       // fetch degrades the chart only. The page is never blank.

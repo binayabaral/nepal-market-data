@@ -19,17 +19,68 @@ const ranges = ['1M', '6M', '1Y', '5Y', 'All'];
   data-has-volume={String(hasVolume)}
   aria-label={`Price chart for ${label}`}
 >
-  <div role="group" aria-label="Chart range" style="display:flex;gap:var(--space-sm);margin-bottom:var(--space-md)">
+  <div role="group" aria-label="Chart range" class="range-group">
     {ranges.map(r => (
-      <button type="button" data-range={r} aria-pressed={r === '6M'} style="cursor:pointer;padding:var(--space-sm) var(--space-lg);border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--foreground);font:inherit">
+      <button type="button" data-range={r} aria-pressed={r === '6M'} class="range-btn">
         {r}
       </button>
     ))}
   </div>
   <p data-chart-status style="color:var(--muted-foreground)">Loading the chart.</p>
-  <div data-chart-canvas style="width:100%;min-height:420px"></div>
+  {/*
+    height is fixed, not min-height: with autoSize the chart's internal ResizeObserver measures
+    this container's own box, and a min-height container has no intrinsic height of its own (its
+    height comes FROM its content, i.e. the chart), which is a feedback loop: the chart grows to
+    fill the container, the container grows to fit the chart, repeat, until the chart is thousands
+    of pixels tall. A fixed height gives autoSize a stable box that isn't determined by the chart's
+    own output.
+  */}
+  <div data-chart-canvas style="width:100%;height:420px"></div>
   <p data-chart-caption style="color:var(--muted-foreground);font-size:12px;margin-top:var(--space-md)"></p>
 </section>
+
+<style>
+  .range-group {
+    display: flex;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+  }
+
+  .range-btn {
+    cursor: pointer;
+    padding: var(--space-sm) var(--space-lg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--card);
+    color: var(--foreground);
+    font: inherit;
+  }
+
+  /*
+   * The active range must be visually distinct for sighted users, not only conveyed via
+   * aria-pressed. It must NOT be a green fill: this control sits directly above the chart, a data
+   * region, and the design system's green rule reserves green inside data regions for "up" and
+   * nothing else. A green active button next to green candles would recreate exactly the ambiguity
+   * that rule exists to prevent. Instead this inverts foreground/background, a non-hue signal that
+   * stays legible in both light and dark mode and survives a greyscale filter, the same standard the
+   * candles are held to.
+   */
+  .range-btn[aria-pressed='true'] {
+    background: var(--foreground);
+    color: var(--background);
+    border-color: var(--foreground);
+    font-weight: 600;
+  }
+
+  /*
+   * A range wider than the symbol's history is disabled rather than hidden (42 symbols have fewer
+   * than 5 rows, one has a single row), so disabled must read as unavailable, not just unselected.
+   */
+  .range-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+</style>
 
 <script>
   import '../components/PriceChart.ts';
