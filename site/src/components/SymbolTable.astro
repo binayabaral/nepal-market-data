@@ -1,0 +1,194 @@
+---
+/**
+ * The full symbol directory: every stock, fund and metal entry, so every symbol on the site is
+ * reachable from this table (reviewed 2026-08-24). It is not filtered to market-wide symbols; that
+ * filter only controls which rows are visible by default.
+ *
+ * Two small inline behaviours, matching OhlcTable's approach: sorting is a tiny vanilla script, not
+ * a framework island, and it degrades to a full unfiltered readable table with JavaScript off. Same
+ * for the search box and the market-wide toggle: every row is always present in the static HTML,
+ * search and the toggle only hide rows with CSS/JS. A no-JS reader, and a search engine, sees every
+ * symbol either way.
+ */
+import type { Kind, ManifestEntry } from '../../../scripts/site/manifest-types';
+import { byKind } from '../lib/manifest';
+import { changeClass, formatChange, formatNumber } from '../lib/format';
+
+const kinds: Kind[] = ['stock', 'fund', 'metal'];
+const rows: ManifestEntry[] = kinds.flatMap(kind => byKind(kind));
+
+function href(entry: ManifestEntry): string {
+  const base = import.meta.env.BASE_URL;
+  const dir = entry.kind === 'metal' ? 'metals' : entry.kind === 'fund' ? 'funds' : 'stocks';
+  return `${base}${dir}/${entry.symbol}`;
+}
+
+function isMarketWide(entry: ManifestEntry): boolean {
+  return entry.instrumentType === 'ordinary' && entry.status === 'listed';
+}
+
+function sortValue(n: number | null): string {
+  return n === null ? '' : String(n);
+}
+---
+
+<div class="symbol-table-controls" style="display:flex;gap:var(--space-lg);align-items:center;flex-wrap:wrap;margin-bottom:var(--space-lg)">
+  <label style="display:flex;flex-direction:column;gap:var(--space-xs);flex:1;min-width:220px">
+    <span style="font-size:12px;color:var(--muted-foreground)">Search symbols</span>
+    <input
+      type="search"
+      data-symbol-search
+      placeholder="Search by symbol or name"
+      style="padding:var(--space-sm) var(--space-md);border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--foreground);font:inherit"
+    />
+  </label>
+  <label style="display:flex;align-items:center;gap:var(--space-sm);cursor:pointer">
+    <input type="checkbox" data-show-extra />
+    <span>Show non-market-wide symbols (debentures, promoter shares, mutual funds, metals, and more)</span>
+  </label>
+  <p data-symbol-count style="margin:0;color:var(--muted-foreground);font-size:12px"></p>
+</div>
+
+<div class="table-wrap">
+  <table data-sortable data-symbol-table>
+    <thead>
+      <tr>
+        <th scope="col" data-sort-key="symbol" data-sort-type="string" aria-sort="ascending" tabindex="0" role="button">Symbol</th>
+        <th scope="col" data-sort-key="name" data-sort-type="string" aria-sort="none" tabindex="0" role="button">Name</th>
+        <th scope="col" data-sort-key="type" data-sort-type="string" aria-sort="none" tabindex="0" role="button">Type</th>
+        <th scope="col" data-sort-key="sector" data-sort-type="string" aria-sort="none" tabindex="0" role="button">Sector</th>
+        <th scope="col" class="num" data-sort-key="last" data-sort-type="number" aria-sort="none" tabindex="0" role="button">Last</th>
+        <th scope="col" class="num" data-sort-key="change" data-sort-type="number" aria-sort="none" tabindex="0" role="button">Change</th>
+        <th scope="col" data-sort-key="asof" data-sort-type="string" aria-sort="none" tabindex="0" role="button">As of</th>
+        <th scope="col" class="num" data-sort-key="sessions" data-sort-type="number" aria-sort="none" tabindex="0" role="button">Sessions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {rows.map(entry => {
+        const extra = !isMarketWide(entry);
+        return (
+          <tr data-symbol={entry.symbol.toLowerCase()} data-name={entry.name.toLowerCase()} data-extra={extra ? 'true' : undefined}>
+            <td data-sort-value={entry.symbol}><a href={href(entry)}>{entry.symbol}</a></td>
+            <td data-sort-value={entry.name}>{entry.name}</td>
+            <td data-sort-value={entry.instrumentType}>{entry.instrumentType.replace(/_/g, ' ')}</td>
+            <td data-sort-value={entry.sector || ''}>{entry.sector || '-'}</td>
+            <td class="num" data-sort-value={sortValue(entry.latestClose)}>{formatNumber(entry.latestClose)}</td>
+            <td class:list={['num', changeClass(entry.changePct)]} data-sort-value={sortValue(entry.changePct)}>{formatChange(entry.changePct)}</td>
+            <td data-sort-value={entry.latestDate}>{entry.latestDate}</td>
+            <td class="num" data-sort-value={sortValue(entry.rows)}>{formatNumber(entry.rows, 0)}</td>
+          </tr>
+        );
+      })}
+    </tbody>
+  </table>
+</div>
+
+<style>
+  /* Hidden by default: the table defaults to market-wide symbols only. The toggle below flips this,
+     purely with CSS, so no re-render or refetch is needed and every row stays in the static HTML. */
+  table[data-symbol-table] tr[data-extra] {
+    display: none;
+  }
+  table[data-symbol-table].show-extra tr[data-extra] {
+    display: table-row;
+  }
+  table[data-symbol-table] tr[data-search-hidden] {
+    display: none !important;
+  }
+  th[data-sort-key] {
+    cursor: pointer;
+    user-select: none;
+  }
+  th[data-sort-key]:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+  }
+  th[aria-sort='ascending']::after {
+    content: ' \25B2';
+  }
+  th[aria-sort='descending']::after {
+    content: ' \25BC';
+  }
+</style>
+
+<script>
+  function initSymbolTable(): void {
+    const table = document.querySelector<HTMLTableElement>('table[data-symbol-table]');
+    const tbody = table?.querySelector('tbody');
+    const search = document.querySelector<HTMLInputElement>('input[data-symbol-search]');
+    const showExtra = document.querySelector<HTMLInputElement>('input[data-show-extra]');
+    const count = document.querySelector<HTMLElement>('[data-symbol-count]');
+    if (!table || !tbody) return;
+
+    function updateCount(): void {
+      if (!count || !tbody) return;
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      const visible = rows.filter(row => {
+        if (row.hasAttribute('data-search-hidden')) return false;
+        if (row.hasAttribute('data-extra') && !table!.classList.contains('show-extra')) return false;
+        return true;
+      });
+      count.textContent = `Showing ${visible.length} of ${rows.length} symbols`;
+    }
+
+    if (showExtra) {
+      showExtra.addEventListener('change', () => {
+        table.classList.toggle('show-extra', showExtra.checked);
+        updateCount();
+      });
+    }
+
+    if (search && tbody) {
+      search.addEventListener('input', () => {
+        const query = search.value.trim().toLowerCase();
+        for (const row of Array.from(tbody.querySelectorAll<HTMLTableRowElement>('tr'))) {
+          const symbol = row.getAttribute('data-symbol') ?? '';
+          const name = row.getAttribute('data-name') ?? '';
+          const matches = query === '' || symbol.includes(query) || name.includes(query);
+          if (matches) row.removeAttribute('data-search-hidden');
+          else row.setAttribute('data-search-hidden', 'true');
+        }
+        updateCount();
+      });
+    }
+
+    // Sorting, identical pattern to OhlcTable.
+    const headers = Array.from(table.querySelectorAll<HTMLTableCellElement>('thead th[data-sort-key]'));
+
+    function sortBy(columnIndex: number, type: string, direction: 'ascending' | 'descending'): void {
+      if (!tbody) return;
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      rows.sort((a, b) => {
+        const rawA = a.children[columnIndex]?.getAttribute('data-sort-value') ?? '';
+        const rawB = b.children[columnIndex]?.getAttribute('data-sort-value') ?? '';
+        if (rawA === '' && rawB === '') return 0;
+        if (rawA === '') return 1;
+        if (rawB === '') return -1;
+        const cmp = type === 'number' ? Number(rawA) - Number(rawB) : rawA < rawB ? -1 : rawA > rawB ? 1 : 0;
+        return direction === 'ascending' ? cmp : -cmp;
+      });
+      for (const row of rows) tbody.appendChild(row);
+    }
+
+    function activate(th: HTMLTableCellElement, columnIndex: number): void {
+      const next: 'ascending' | 'descending' = th.getAttribute('aria-sort') === 'ascending' ? 'descending' : 'ascending';
+      for (const h of headers) h.setAttribute('aria-sort', 'none');
+      th.setAttribute('aria-sort', next);
+      sortBy(columnIndex, th.dataset.sortType ?? 'string', next);
+    }
+
+    headers.forEach((th, columnIndex) => {
+      th.addEventListener('click', () => activate(th, columnIndex));
+      th.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          activate(th, columnIndex);
+        }
+      });
+    });
+
+    updateCount();
+  }
+
+  initSymbolTable();
+</script>

@@ -1,0 +1,129 @@
+---
+import Base from '../layouts/Base.astro';
+import ChartMount from '../components/ChartMount.astro';
+import SymbolTable from '../components/SymbolTable.astro';
+import { entries, findEntry, marketWide } from '../lib/manifest';
+import { changeClass, csvPath, formatChange, formatNumber } from '../lib/format';
+
+const index = findEntry('NEPSE_INDEX');
+const gold24 = findEntry('gold-24k');
+const gold22 = findEntry('gold-22k');
+const silver = findEntry('silver');
+if (!index || !gold24 || !gold22 || !silver) {
+  throw new Error('Landing page KPI entries missing from the manifest');
+}
+
+// Movers are computed from marketWide() only: instrumentType === 'ordinary' && status === 'listed',
+// never from "has a sector". A debenture, promoter share, closed-end fund or merged shell showing up
+// here means the filter was skipped.
+const withChange = marketWide().filter(entry => entry.changePct !== null);
+const gainers = [...withChange].sort((a, b) => (b.changePct as number) - (a.changePct as number)).slice(0, 5);
+const losers = [...withChange].sort((a, b) => (a.changePct as number) - (b.changePct as number)).slice(0, 5);
+
+// Row count and date span read from the manifest, never hardcoded, since both grow daily.
+const totalRows = entries.reduce((sum, entry) => sum + entry.rows, 0);
+const firstDate = entries.reduce((min, entry) => (entry.firstDate < min ? entry.firstDate : min), entries[0].firstDate);
+const latestDate = entries.reduce((max, entry) => (entry.latestDate > max ? entry.latestDate : max), entries[0].latestDate);
+
+function moverHref(symbol: string): string {
+  return `${import.meta.env.BASE_URL}stocks/${symbol}`;
+}
+---
+
+<Base
+  title="Nepal Market Data | NEPSE, gold, silver and mutual fund history"
+  description="A free, daily-updated, open dataset of NEPSE stock prices, gold and silver rates, and SIP mutual fund NAVs, as plain CSV."
+>
+  <h1 style="margin:0">Nepal Market Data</h1>
+  <p style="margin:var(--space-sm) 0 var(--space-2xl);color:var(--muted-foreground)">
+    A free, daily-updated, open dataset covering {formatNumber(totalRows, 0)} rows of NEPSE stock
+    prices, precious metal rates and SIP mutual fund NAVs, from {firstDate} to {latestDate}.
+  </p>
+
+  <ChartMount csvUrl={csvPath(index)} kind="ohlc" valueColumn="close" hasVolume={false} label="NEPSE Index" />
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:var(--grid-gap);margin:var(--space-2xl) 0">
+    <div style="border:1px solid var(--border);border-radius:var(--radius);padding:var(--card-padding);background:var(--card)">
+      <div style="color:var(--muted-foreground);font-size:12px">NEPSE Index</div>
+      <div class="num" style="font-size:24px;text-align:left">{formatNumber(index.latestClose)}</div>
+      <div class:list={['num', changeClass(index.changePct)]} style="text-align:left">{formatChange(index.changePct)}</div>
+      <div style="color:var(--muted-foreground);font-size:12px">As of {index.latestDate}</div>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:var(--radius);padding:var(--card-padding);background:var(--card)">
+      <div style="color:var(--muted-foreground);font-size:12px">Gold 24K (per tola)</div>
+      <div class="num" style="font-size:24px;text-align:left">{formatNumber(gold24.latestClose)}</div>
+      <div class:list={['num', changeClass(gold24.changePct)]} style="text-align:left">{formatChange(gold24.changePct)}</div>
+      <div style="color:var(--muted-foreground);font-size:12px">As of {gold24.latestDate}</div>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:var(--radius);padding:var(--card-padding);background:var(--card)">
+      <div style="color:var(--muted-foreground);font-size:12px">Gold 22K (per tola)</div>
+      <div class="num" style="font-size:24px;text-align:left">{formatNumber(gold22.latestClose)}</div>
+      <div class:list={['num', changeClass(gold22.changePct)]} style="text-align:left">{formatChange(gold22.changePct)}</div>
+      <div style="color:var(--muted-foreground);font-size:12px">As of {gold22.latestDate}</div>
+    </div>
+    <div style="border:1px solid var(--border);border-radius:var(--radius);padding:var(--card-padding);background:var(--card)">
+      <div style="color:var(--muted-foreground);font-size:12px">Silver (per tola)</div>
+      <div class="num" style="font-size:24px;text-align:left">{formatNumber(silver.latestClose)}</div>
+      <div class:list={['num', changeClass(silver.changePct)]} style="text-align:left">{formatChange(silver.changePct)}</div>
+      <div style="color:var(--muted-foreground);font-size:12px">As of {silver.latestDate}</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:var(--space-2xl);margin-bottom:var(--space-2xl)">
+    <div>
+      <h2 style="margin-bottom:var(--space-sm)">Top gainers</h2>
+      <p style="color:var(--muted-foreground);font-size:12px;margin-top:0">Market-wide symbols only: ordinary shares, currently listed.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Symbol</th>
+              <th scope="col" class="num">Last</th>
+              <th scope="col" class="num">Change</th>
+            </tr>
+          </thead>
+          <tbody>
+            {gainers.map(entry => (
+              <tr>
+                <td><a href={moverHref(entry.symbol)}>{entry.symbol}</a></td>
+                <td class="num">{formatNumber(entry.latestClose)}</td>
+                <td class:list={['num', changeClass(entry.changePct)]}>{formatChange(entry.changePct)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <h2 style="margin-bottom:var(--space-sm)">Top losers</h2>
+      <p style="color:var(--muted-foreground);font-size:12px;margin-top:0">Market-wide symbols only: ordinary shares, currently listed.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Symbol</th>
+              <th scope="col" class="num">Last</th>
+              <th scope="col" class="num">Change</th>
+            </tr>
+          </thead>
+          <tbody>
+            {losers.map(entry => (
+              <tr>
+                <td><a href={moverHref(entry.symbol)}>{entry.symbol}</a></td>
+                <td class="num">{formatNumber(entry.latestClose)}</td>
+                <td class:list={['num', changeClass(entry.changePct)]}>{formatChange(entry.changePct)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <h2>All symbols</h2>
+  <p style="color:var(--muted-foreground);font-size:12px;margin-top:0">
+    Every stock, fund and metal in the dataset. Market-wide symbols are shown by default; use the
+    toggle to see debentures, promoter shares, mutual funds and metals too.
+  </p>
+  <SymbolTable />
+</Base>
