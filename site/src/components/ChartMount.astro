@@ -1,0 +1,36 @@
+---
+interface Props {
+  csvUrl: string;
+  kind: 'ohlc' | 'line';
+  valueColumn: string;
+  hasVolume: boolean;
+  label: string;
+}
+
+const { csvUrl, kind, valueColumn, hasVolume, label } = Astro.props;
+const ranges = ['1M', '6M', '1Y', '5Y', 'All'];
+---
+
+<section
+  data-price-chart
+  data-csv-url={csvUrl}
+  data-kind={kind}
+  data-value-column={valueColumn}
+  data-has-volume={String(hasVolume)}
+  aria-label={`Price chart for ${label}`}
+>
+  <div role="group" aria-label="Chart range" style="display:flex;gap:var(--space-sm);margin-bottom:var(--space-md)">
+    {ranges.map(r => (
+      <button type="button" data-range={r} aria-pressed={r === '6M'} style="cursor:pointer;padding:var(--space-sm) var(--space-lg);border:1px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--foreground);font:inherit">
+        {r}
+      </button>
+    ))}
+  </div>
+  <p data-chart-status style="color:var(--muted-foreground)">Loading the chart.</p>
+  <div data-chart-canvas style="width:100%;min-height:420px"></div>
+  <p data-chart-caption style="color:var(--muted-foreground);font-size:12px;margin-top:var(--space-md)"></p>
+</section>
+
+<script>
+  import '../components/PriceChart.ts';
+</script>
