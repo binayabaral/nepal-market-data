@@ -172,7 +172,7 @@ lightweight-charts (TradingView, Apache 2.0), self-hosted, the only hydrated isl
 |---|---|
 | CSV fetch fails | chart area shows an inline message; the prerendered latest numbers and the OHLC table still render, so the page is never blank |
 | symbol has very few rows | chart renders what exists; range buttons wider than the history are disabled, not hidden |
-| blank `sector` | render `—`, never "Unknown" or a guess |
+| blank `sector` | render a plain `-`, never "Unknown" and never a guess |
 | blank `amc` (SLK) | omit the line rather than showing an empty label |
 | `status == 'merged'` | page renders with a banner saying the company no longer trades and the last session it did; excluded from market-wide views |
 | debentures / promoter shares | own pages render normally, excluded from movers and sector views |
