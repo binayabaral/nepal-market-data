@@ -1,8 +1,27 @@
 name: Deploy Site
 
 on:
+  # Code changes pushed by a human.
   push:
     branches: [main]
+
+  # Data changes committed by the scrapers. This has to be workflow_run, not push: the scrapers push
+  # with the default GITHUB_TOKEN, and GitHub deliberately does not fire triggers for pushes made
+  # with it, to stop workflows recursing. So `push` above never sees a data commit. workflow_run is
+  # the documented exception for chaining, and fires whoever started the upstream run.
+  #
+  # This matters more than it looks: the site is NOT self-refreshing. sync-data.ts copies data/ into
+  # the deploy artifact, so the CSVs the charts fetch are the build-time snapshot, not the live repo.
+  # Without this trigger the whole site freezes at the last human push, which is exactly what
+  # happened: it served 2026-08-26 rows a day after 2026-08-27 was committed.
+  workflow_run:
+    workflows:
+      - Scrape NEPSE
+      - Scrape Precious Metals
+      - Scrape SIP Mutual Fund NAVs
+      - Reconcile history
+    types: [completed]
+
   workflow_dispatch:
 
 concurrency:
@@ -20,6 +39,9 @@ permissions:
 
 jobs:
   build:
+    # On a workflow_run, only deploy if the upstream scrape actually succeeded. A failed scrape has
+    # nothing new to publish, and deploying its half-state would be worse than waiting.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

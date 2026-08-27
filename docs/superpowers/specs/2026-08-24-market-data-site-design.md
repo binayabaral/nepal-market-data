@@ -44,8 +44,17 @@ make `data/` unreachable from the site; choosing root would mean committing buil
 dataset repo. The Actions route uploads an artifact containing **both** the built site and `data/`,
 so the CSVs sit on the same origin as the pages while nothing generated is committed.
 
-**Consequence worth stating plainly:** fresh data appears on the site without a rebuild, because the
-charts fetch CSVs at runtime. A rebuild only refreshes prerendered numbers and the manifest.
+**Corrected 2026-08-27. The earlier claim here was wrong** and is kept visible rather than quietly
+deleted, because it caused a real bug. It said fresh data appears without a rebuild since the charts
+fetch CSVs at runtime. It does not: `sync-data.ts` copies `data/` INTO the artifact, so the CSVs the
+charts fetch are the build-time snapshot on the same origin, not the live repo. **Every data change
+needs a rebuild**, for the prerendered numbers and for the CSVs alike.
+
+That mattered because the scrapers push with the default `GITHUB_TOKEN`, and GitHub does not fire
+triggers for pushes made with it. So `on: push` never saw a data commit and the site froze at the
+last human push, serving 2026-08-26 rows a day after 2026-08-27 was committed. The deploy workflow
+now also triggers on `workflow_run` from the four data workflows, which is the documented exception
+for chaining.
 
 ### Base path
 
