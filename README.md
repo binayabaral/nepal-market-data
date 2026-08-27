@@ -4,6 +4,10 @@ A daily-updated, public, versioned dataset of NEPSE stock prices, gold/silver ra
 open-end (SIP) mutual fund NAVs, stored as plain CSV files and updated automatically by GitHub
 Actions. MIT licensed, free to use for research, apps, or your own analysis.
 
+**Browse it at https://binayabaral.github.io/nepal-market-data/** to search any symbol, chart its
+history and download the raw CSV, without cloning anything. The site is built from the same files in
+`data/`, so it is never a separate copy that can drift.
+
 ## Why this exists
 
 Valuing a Nepali portfolio means knowing what a scrip closed at, what a tola of gold cost, and what
