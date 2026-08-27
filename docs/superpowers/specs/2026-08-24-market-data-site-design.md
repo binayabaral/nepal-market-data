@@ -94,7 +94,7 @@ quote-aware and already handles the comma inside `"9% Shangrila Development Bank
 ### Runtime
 
 Symbol pages prerender identity and latest numbers into HTML for SEO. The chart island fetches
-`${BASE_URL}data/nepse/<SYM>.csv` on becoming visible and parses it with a small splitter — the
+`${BASE_URL}data/nepse/<SYM>.csv` on becoming visible and parses it with a small splitter: the
 schema is fixed and trivial, so a CSV library is not worth the bytes.
 
 Largest single fetch is `NEPSE_INDEX.csv` at 371KB uncompressed, served gzipped by Pages. Per-scrip
@@ -140,7 +140,7 @@ Full tokens and rules in `design-system/nepal-market-data/MASTER.md`. The load-b
   dark, `--destructive` `#EF4444` / `#F77373`, `--background` `#FFFFFF` / `#0C0A09`.
 - **Green is both brand and "up".** Deliberate, for consistency with expensesync. Contained by two
   non-optional rules: no green chrome inside a data region, and direction never carried by colour
-  alone (candles filled/hollow, changes always `+`/`−` prefixed).
+  alone (candles filled/hollow, changes always `+` or `-` prefixed).
 - **Geist / Geist Mono**, matching expensesync. All numeric columns `tabular-nums`.
 - **Data-Dense Dashboard** style: 36px table rows, 12px card padding, 8px grid gap, sticky headers,
   12-14px body on data pages.
