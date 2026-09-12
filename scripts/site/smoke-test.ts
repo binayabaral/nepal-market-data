@@ -398,9 +398,44 @@ function checkMoversAreMarketWide(): void {
   if (failures === 0) ok('landing page movers contain only ordinary, listed symbols');
 }
 
+/**
+ * The manifest is published at `dist/data/manifest.json` so a consumer can read every symbol's
+ * latest close in one request. It is a separate copy from the `site/src/data/` one Astro imports,
+ * and `sync-data.ts` deletes the whole `dist/data` tree before recreating it, so a reordering of the
+ * build could drop it without breaking a single page. Assert its CONTENT, not just its presence: an
+ * empty or truncated file would satisfy an existence check while being useless to every consumer.
+ */
+function checkPublishedManifest(): void {
+  const path = join(DIST, 'data', 'manifest.json');
+  if (!existsSync(path)) {
+    fail(`${path} is missing; the manifest was not published alongside the CSVs`);
+    return;
+  }
+  let published: Manifest;
+  try {
+    published = JSON.parse(readFileSync(path, 'utf8')) as Manifest;
+  } catch (error) {
+    fail(`${path} is not valid JSON: ${(error as Error).message}`);
+    return;
+  }
+  const expected = readManifest().entries.length;
+  if (published.entries?.length !== expected) {
+    fail(`${path} has ${published.entries?.length ?? 0} entries, expected ${expected} to match the build manifest`);
+    return;
+  }
+  const missingClose = published.entries.filter(e => e.latestClose === null || e.latestClose === undefined);
+  const [firstMissing] = missingClose;
+  if (firstMissing) {
+    fail(`${path}: ${missingClose.length} entr(ies) have no latestClose, e.g. ${firstMissing.symbol}`);
+    return;
+  }
+  ok(`published manifest at data/manifest.json has all ${expected} entries with a latestClose`);
+}
+
 // --- Run ----------------------------------------------------------------------------------------
 
 checkPageCount();
+checkPublishedManifest();
 checkCsvCoverage();
 checkTablesPopulated();
 checkSampledLatestClose();
