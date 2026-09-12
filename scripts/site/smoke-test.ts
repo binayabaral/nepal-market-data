@@ -432,10 +432,54 @@ function checkPublishedManifest(): void {
   ok(`published manifest at data/manifest.json has all ${expected} entries with a latestClose`);
 }
 
+/**
+ * Every manifest entry must have a published history JSON at the path a consumer would fetch, and
+ * that file must actually carry the history. Assert CONTENT, not existence: a file with an empty
+ * `history` array is valid JSON, serves a 200, and is useless.
+ *
+ * The row count and last date are checked against the manifest rather than against a hardcoded
+ * number, so this stays correct as the dataset grows.
+ */
+function checkPublishedHistoryJson(): void {
+  const entries = readManifest().entries;
+  let checked = 0;
+  for (const entry of entries) {
+    const path = join(DIST, 'data', DATA_SUBDIR[entry.kind], `${entry.symbol}.json`);
+    if (!existsSync(path)) {
+      fail(`${path} is missing; ${entry.symbol} has no published history JSON`);
+      return;
+    }
+    let payload: { rows?: number; history?: Array<Record<string, unknown>> };
+    try {
+      payload = JSON.parse(readFileSync(path, 'utf8'));
+    } catch (error) {
+      fail(`${path} is not valid JSON: ${(error as Error).message}`);
+      return;
+    }
+    const history = payload.history;
+    if (!Array.isArray(history) || history.length === 0) {
+      fail(`${path} has an empty history array`);
+      return;
+    }
+    if (history.length !== entry.rows) {
+      fail(`${path} has ${history.length} history rows, manifest says ${entry.rows}`);
+      return;
+    }
+    const last = history[history.length - 1];
+    if (last?.date !== entry.latestDate) {
+      fail(`${path}: last history date is ${String(last?.date)}, manifest says ${entry.latestDate}`);
+      return;
+    }
+    checked += 1;
+  }
+  ok(`every manifest entry (${checked}) has a history JSON whose row count and last date match`);
+}
+
 // --- Run ----------------------------------------------------------------------------------------
 
 checkPageCount();
 checkPublishedManifest();
+checkPublishedHistoryJson();
 checkCsvCoverage();
 checkTablesPopulated();
 checkSampledLatestClose();
