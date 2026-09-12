@@ -1,0 +1,26 @@
+{
+  // Cloudflare Workers Static Assets config for the published site.
+  //
+  // Two things this file exists to solve:
+  //
+  // 1. `wrangler deploy` run at this repo root refuses to guess what to deploy, because
+  //    pnpm-workspace.yaml makes this a workspace root ("application detection logic has been run
+  //    in the root of a workspace"). An explicit config gives it the target it was asking for.
+  //
+  // 2. The build has to run from the repo root, not from site/: scripts/site/build-manifest.ts and
+  //    scripts/site/sync-data.ts both resolve paths relative to the root, and the manifest they
+  //    generate is gitignored, so a build started inside site/ fails on a missing import.
+  //
+  // There is deliberately no "main": nothing here runs Worker code, it is static assets only.
+  "name": "nepal-market-data",
+  "compatibility_date": "2026-09-12",
+  "assets": {
+    "directory": "./site/dist",
+    // Astro emits directory-style pages (/about/index.html), so requests need trailing-slash
+    // normalisation to resolve.
+    "html_handling": "auto-trailing-slash",
+    // "404-page" would look for site/dist/404.html, which this site does not build. Serve a plain
+    // 404 instead of silently falling back to index.html and showing the dashboard for a bad URL.
+    "not_found_handling": "none"
+  }
+}
