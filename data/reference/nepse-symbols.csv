@@ -9,6 +9,7 @@ AKJCL,Ankhukhola Hydropower Company Limited,Hydropower,ordinary,Hydropower,liste
 AKPL,Arun Kabeli Power Limited,Hydropower,ordinary,Hydropower,listed
 ALBSL,Asha Laghubitta Bittiya Sanstha Limited,Microfinance,ordinary,Microfinance,listed
 ALICL,Asian Life Insurance Company Limited,Life Insurance,ordinary,Life Insurance,listed
+ALICLP,Asian Life Insurance company Limited Promoter Share,Promoter Share,promoter_share,,listed
 ANLB,Aatmanirbhar Laghubitta Bittiya Sanstha Limited,Microfinance,ordinary,Microfinance,listed
 APHL,Appolo Hydropower Limited,Hydropower,ordinary,Hydropower,listed
 API,Api Power Company Limited,Hydropower,ordinary,Hydropower,listed
@@ -168,6 +169,7 @@ LBLD88,8.5% Laxmi Bank Debenture,Corporate Debentures,debenture,,listed
 LEC,Liberty Energy Company Limited,Hydropower,ordinary,Hydropower,listed
 LICN,Life Insurance Corporation Nepal Limited,Life Insurance,ordinary,Life Insurance,listed
 LLBS,Laxmi Laghubitta Bittiya Sanstha Limited,Microfinance,ordinary,Microfinance,listed
+LSD92,7% Laxmi Sunrise Debenture 2092,Corporate Debentures,debenture,,listed
 LSH12,LS Horizon 12,Mutual Fund,mutual_fund,,listed
 LSL,Laxmi Sunrise Bank Limited,Commercial Bank,ordinary,Commercial Bank,listed
 LUK,Laxmi Unnati Kosh,Mutual Fund,mutual_fund,,listed
@@ -201,6 +203,7 @@ MKJC,Mailung Khola Jal Vidhyut Company Limited,Hydropower,ordinary,Hydropower,li
 MLBBL,Mithila Laghubitta Bittiya Sanstha Limited,Microfinance,ordinary,Microfinance,listed
 MLBL,Mahalaxmi Bikas Bank Limited,Development Bank,ordinary,Development Bank,listed
 MLBLD89,11% Mahalaxmi Debenture 2089,Corporate Debentures,debenture,,listed
+MLBLPO,Mahalaxmi Bikas Bank Ltd. Promotor Share,Promoter Share,promoter_share,,listed
 MLBS,Manushi Laghubitta Bittiya Sanstha Limited,Microfinance,ordinary,Microfinance,listed
 MLBSL,Mahila Laghubitta Bittiya Sanstha Limited,Microfinance,ordinary,Microfinance,listed
 MMF1,Mega Mutual Fund - 1,Mutual Fund,mutual_fund,,listed
@@ -362,6 +365,7 @@ SBLD2091,7.25% SBL Debenture 2091,Corporate Debentures,debenture,,listed
 SBLD83,10.25% SBL Debenture 2083,Corporate Debentures,debenture,,listed
 SBLD84,8.5% SBL Debenture 2084,Corporate Debentures,debenture,,listed
 SBLD89,10.75 % SBL Debenture 2089,Corporate Debentures,debenture,,listed
+SBLPO,Siddhartha Bank Limited Promoter Share,Promoter Share,promoter_share,,listed
 SCB,Standard Chartered Bank Nepal Limited,Commercial Bank,ordinary,Commercial Bank,listed
 SCBD,10.30% Standard Chartered Bank Nepal Limited Debenture,Corporate Debentures,debenture,,listed
 SDBD87,"9% Shangrila Development Bank Debenture, 2087",Corporate Debentures,debenture,,listed
