@@ -1,70 +1,93 @@
 /**
- * Shared fetch/parse for NIC Asia Capital's NAV Details page (nicasiacapital.com), used by both
- * NIC Asia schemes tracked here (NADDF/Dynamic Debt Fund, NICAELIS/Equity Linked Investment
- * Scheme). Same AMC, same page, same query-string shape, only the `category` id differs.
+ * Shared fetch/parse for NIC Asia Capital's NAV history (nicasiacapital.com), used by both NIC Asia
+ * schemes tracked here (NADDF/Dynamic Debt Fund, NICAELIS/Equity Linked Investment Scheme). Same AMC,
+ * same endpoint, only the `category` id differs (5 and 11).
  *
- * The page is plain server-rendered HTML (no bot-protection, no AJAX/JS needed): a GET request
- * with `category`+`year`+`type=3` (Daily) query params returns a `<table class="tablefull">` of
- * daily NAV rows. Out-of-range years and pages past the end render a "No record found." row
- * instead of erroring, which is how an empty page is detected.
+ * Since the site's redesign (noticed 2026-10-26, broken since about 2026-10-05) the NAV Details page
+ * ships empty "-" placeholders and fills its tables with jQuery from a JSON endpoint:
  *
- * That table is PAGINATED at 30 rows a page, newest first, with an undocumented `page` param. A
- * request without `page` answers as page 1, so reading only that gave the 30 most recent rows of
- * the requested year and nothing else, which is why both funds looked like sparse disclosers
- * publishing exactly 30 times a year. `fetchNicAsiaYear` walks the pages; `fetchNicAsiaPage` is
- * exposed for the daily scripts, which only need the newest page.
+ *   GET /nav-details/daily-data?page=N&year=YYYY&category=ID
+ *   -> { data: [{ publish_at: "Oct 16, 2026", value: 9.97, nepali_date: "..." }, ...],
+ *        current_page, last_page, total, pagination: "<html>" }
+ *
+ * Newest first, 8 rows a page. The old parser looked for a server-rendered `<table class="tablefull">`
+ * and returned [] when it was missing, so the redesign looked exactly like a quiet source for three
+ * weeks. Hence the rule here: an unexpected response shape THROWS (the run goes red); only a
+ * well-formed response with an empty `data` array means "no rows".
+ *
+ * The new site's history is shorter than ours (NADDF has only rows from 2026-09-23 there), so callers
+ * must keep appending, never treat a fetch as the complete series.
  */
 
 import { isoDateFromLabel } from './nepal-time';
 
-const NAV_DETAILS_URL = 'https://www.nicasiacapital.com/nav-details';
+const DAILY_DATA_URL = 'https://www.nicasiacapital.com/nav-details/daily-data';
 
 /**
- * A year of daily NAV is at most ~366 rows, so 30 pages is already an order of magnitude of
- * headroom. The bound exists so a markup change that stops the "No record found." sentinel from
- * appearing cannot turn the loop into an infinite crawl of the AMC's site.
+ * A year of daily NAV is at most ~366 rows, about 46 pages of 8. The bound exists so a response that
+ * keeps reporting more pages cannot turn the loop into an endless crawl of the AMC's site.
  */
-const MAX_PAGES_PER_YEAR = 30;
+const MAX_PAGES_PER_YEAR = 60;
 
 export type NicAsiaNavRow = { publishedDate: string; nav: number };
+export type NicAsiaPage = { rows: NicAsiaNavRow[]; lastPage: number };
 
-/** One page (up to 30 rows) of a year's daily NAV, newest first. Page 1 row 0 is the latest row. */
-export async function fetchNicAsiaPage(categoryId: number, year: number, page: number): Promise<NicAsiaNavRow[]> {
-  const response = await fetch(`${NAV_DETAILS_URL}?category=${categoryId}&year=${year}&type=3&page=${page}`, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NepalMarketData/1.0)' }
-  });
-  if (!response.ok) {
-    throw new Error(
-      `HTTP error fetching NIC Asia NAV details (category=${categoryId}, year=${year}, page=${page}): ${response.status}`
-    );
+/**
+ * Validates one page of the JSON endpoint and maps it to rows for `year`. Throws on any shape the
+ * endpoint is not known to return, so a future redesign fails loudly instead of silently.
+ */
+export function parseNicAsiaPage(body: unknown, year: number, context: string): NicAsiaPage {
+  const page = body as { data?: unknown; last_page?: unknown } | null;
+  if (!page || typeof page !== 'object' || !Array.isArray(page.data) || typeof page.last_page !== 'number') {
+    throw new Error(`Unexpected NIC Asia NAV response shape (${context}): ${JSON.stringify(body).slice(0, 200)}`);
   }
-
-  const html = await response.text();
-  const tableBody = html.match(/<table class="tablefull">([\s\S]*?)<\/table>/)?.[1];
-  if (!tableBody || tableBody.includes('No record found')) return [];
 
   const rows: NicAsiaNavRow[] = [];
-  const rowRegex = /<tr>\s*<td>([^<]+)<\/td>\s*<td>[\s\S]*?<\/td>\s*<td>([^<]+)<\/td>\s*<\/tr>/g;
-  let match: RegExpExecArray | null;
-  while ((match = rowRegex.exec(tableBody))) {
-    const [, englishDate, navRaw] = match;
-    if (!englishDate || !navRaw) continue;
-    const publishedDate = isoDateFromLabel(englishDate);
-    const nav = parseFloat(navRaw.trim());
-    if (!publishedDate || isNaN(nav) || nav <= 0) continue;
-    if (!publishedDate.startsWith(`${year}-`)) continue; // defensive: a different AMC's API was seen returning the wrong year's rows for an out-of-range request
+  for (const item of page.data as Array<{ publish_at?: unknown; value?: unknown }>) {
+    if (typeof item?.publish_at !== 'string' || (typeof item.value !== 'number' && typeof item.value !== 'string')) {
+      throw new Error(`Unexpected NIC Asia NAV row shape (${context}): ${JSON.stringify(item).slice(0, 200)}`);
+    }
+    const publishedDate = isoDateFromLabel(item.publish_at);
+    const nav = Number(item.value);
+    if (!publishedDate || !Number.isFinite(nav) || nav <= 0) continue;
+    if (!publishedDate.startsWith(`${year}-`)) continue; // defensive: never let an out-of-range year leak in
     rows.push({ publishedDate, nav });
   }
-  return rows;
+  return { rows, lastPage: page.last_page };
 }
 
-/** Every daily NAV row the site holds for one year, walking pages until one comes back empty. */
+async function fetchPage(categoryId: number, year: number, page: number): Promise<NicAsiaPage> {
+  const context = `category=${categoryId}, year=${year}, page=${page}`;
+  const response = await fetch(`${DAILY_DATA_URL}?page=${page}&year=${year}&category=${categoryId}`, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (compatible; NepalMarketData/1.0)',
+      Accept: 'application/json',
+      'X-Requested-With': 'XMLHttpRequest'
+    }
+  });
+  if (!response.ok) throw new Error(`HTTP error fetching NIC Asia NAV (${context}): ${response.status}`);
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new Error(`NIC Asia NAV response is not JSON (${context}); the endpoint may have moved again`);
+  }
+  return parseNicAsiaPage(body, year, context);
+}
+
+/** One page (up to 8 rows) of a year's daily NAV, newest first. Page 1 row 0 is the latest row. */
+export async function fetchNicAsiaPage(categoryId: number, year: number, page: number): Promise<NicAsiaNavRow[]> {
+  return (await fetchPage(categoryId, year, page)).rows;
+}
+
+/** Every row the source still has for `year`, walking pages up to the reported `last_page`. */
 export async function fetchNicAsiaYear(categoryId: number, year: number): Promise<NicAsiaNavRow[]> {
   const rows: NicAsiaNavRow[] = [];
   for (let page = 1; page <= MAX_PAGES_PER_YEAR; page++) {
-    const pageRows = await fetchNicAsiaPage(categoryId, year, page);
-    if (pageRows.length === 0) break;
-    rows.push(...pageRows);
+    const result = await fetchPage(categoryId, year, page);
+    rows.push(...result.rows);
+    if (page >= result.lastPage || result.rows.length === 0) break;
   }
   return rows;
 }
