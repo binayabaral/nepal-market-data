@@ -7,9 +7,11 @@ on:
     - cron: '0 13 * * *'
   workflow_dispatch:
 
-# Deliberately triggered by GitHub's own schedule and NOT by the Cloudflare Worker. This is the check
-# that watches the pipeline, so it must not depend on the piece most likely to fail: if the Worker
-# stops dispatching, every dataset goes stale and this is what says so.
+# Triggered two ways. The Cloudflare Worker dispatches it at 13:00 UTC on time; GitHub's own schedule
+# is kept as the fallback, now running 7 to 11 hours late. The check must not depend on the Worker
+# (if the Worker stops dispatching, every dataset goes stale and this is what says so), so the
+# scheduled run only stands down when a Worker-dispatched run has already completed recently. A dead
+# Worker leaves no such run, and the scheduled one goes ahead.
 
 concurrency:
   # Its own group, not the shared `commit-data`. That group serialises workflows that push to the
@@ -19,25 +21,47 @@ concurrency:
 
 permissions:
   contents: read
+  # To see whether the Worker-dispatched run already happened.
+  actions: read
 
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
+      # 20 hours, not "today in UTC": the scheduled run can start after midnight UTC, the day after the
+      # dispatched run it duplicates, and still must stand down.
+      - name: Skip if the Worker already ran this check
+        id: dedup
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          since=$(date -u -d '20 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          count=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow check-freshness.yml \
+            --event workflow_dispatch --status completed --limit 20 \
+            --json createdAt --jq "[.[] | select(.createdAt >= \"$since\")] | length")
+          echo "Worker-dispatched runs completed since $since: $count"
+          if [ "$count" -gt 0 ]; then echo "skip=true" >> "$GITHUB_OUTPUT"; fi
+
       - uses: actions/checkout@v7
+        if: steps.dedup.outputs.skip != 'true'
 
       - uses: pnpm/action-setup@v6
+        if: steps.dedup.outputs.skip != 'true'
         with:
           version: 11.14.0
           run_install: false
 
       - uses: actions/setup-node@v7
+        if: steps.dedup.outputs.skip != 'true'
         with:
           node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies
+        if: steps.dedup.outputs.skip != 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Check every dataset for staleness
+        if: steps.dedup.outputs.skip != 'true'
         run: pnpm tsx scripts/ci/check-freshness.ts
